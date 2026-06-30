@@ -1,0 +1,536 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { 
+  MapPin, Clock, MessageSquare, Send, CheckCircle2, Phone, 
+  Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+export default function TrackBooking() {
+  // Timeline status states
+  const [currentStatus, setCurrentStatus] = useState<'ACCEPTED' | 'DEPARTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED'>('DEPARTED');
+  const [eta, setEta] = useState(8);
+  const [otp, setOtp] = useState('7742');
+  const [showOtpVerified, setShowOtpVerified] = useState(false);
+  const [jobProgress, setJobProgress] = useState(0);
+
+  // Chat with technician
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<any[]>([
+    { sender: 'tech', text: 'Hi! I am Ramesh Patel. I have accepted your request and I am gathering my plumbing toolkit. I will be heading your way in 2 minutes.' },
+    { sender: 'tech', text: 'I am on my way now. Traffic looks normal.' }
+  ]);
+
+  // Invoice simulation
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  // Canvas map simulator variables
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const [techPos, setTechPos] = useState({ x: 50, y: 150 });
+  const destPos = { x: 320, y: 80 }; // Customer location
+
+  // WebSocket / coordinate update simulations
+  useEffect(() => {
+    let startX = 50;
+    let startY = 150;
+    let progress = 0;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const animateMap = () => {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw stylized cyberpunk grid background
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      const gridSize = 30;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Draw roads (thick blue lines)
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 20;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Road path coordinates
+      ctx.beginPath();
+      ctx.moveTo(50, 150);
+      ctx.lineTo(150, 150);
+      ctx.lineTo(150, 80);
+      ctx.lineTo(320, 80);
+      ctx.stroke();
+
+      // Draw road inner glowing lane
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = 16;
+      ctx.stroke();
+
+      // Draw destination house node
+      ctx.shadowColor = '#6366f1';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#6366f1';
+      ctx.beginPath();
+      ctx.arc(destPos.x, destPos.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Destination Label
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText("YOUR HOME", destPos.x - 24, destPos.y - 14);
+
+      // Animate technician positioning
+      progress += 0.0015; // Slow travel increment
+      if (progress > 1) {
+        progress = 1;
+        setCurrentStatus('ARRIVED');
+        setEta(0);
+      }
+
+      // Compute interpolation along the road coordinates
+      let currentX = startX;
+      let currentY = startY;
+
+      if (progress < 0.4) {
+        // Segment 1: (50, 150) -> (150, 150)
+        const t = progress / 0.4;
+        currentX = startX + t * (150 - 50);
+        currentY = 150;
+      } else if (progress < 0.7) {
+        // Segment 2: (150, 150) -> (150, 80)
+        const t = (progress - 0.4) / 0.3;
+        currentX = 150;
+        currentY = 150 + t * (80 - 150);
+      } else {
+        // Segment 3: (150, 80) -> (320, 80)
+        const t = (progress - 0.7) / 0.3;
+        currentX = 150 + t * (320 - 150);
+        currentY = 80;
+      }
+
+      setTechPos({ x: currentX, y: currentY });
+
+      // Calculate matching remaining minutes
+      const remainingEta = Math.max(0, Math.round((1 - progress) * 8));
+      if (remainingEta !== eta && remainingEta >= 0) {
+        setEta(remainingEta);
+      }
+
+      // Draw moving tech vehicle node
+      ctx.shadowColor = '#06b6d4';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#06b6d4';
+      ctx.beginPath();
+      ctx.arc(currentX, currentY, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tech Label
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#22d3ee';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.fillText("TECH: RAMESH", currentX - 28, currentY - 12);
+
+      animationRef.current = requestAnimationFrame(animateMap);
+    };
+
+    animationRef.current = requestAnimationFrame(animateMap);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  // Job progress simulator (when status is IN_PROGRESS)
+  useEffect(() => {
+    if (currentStatus !== 'IN_PROGRESS') return;
+    const interval = setInterval(() => {
+      setJobProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setCurrentStatus('COMPLETED');
+          return 100;
+        }
+        return prev + 5;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentStatus]);
+
+  // Handle client chat message
+  const handleChatSend = () => {
+    if (!chatInput.trim()) return;
+    setChatMessages(prev => [...prev, { sender: 'user', text: chatInput }]);
+    const text = chatInput;
+    setChatInput('');
+
+    setTimeout(() => {
+      let reply = "Understood. I'm parking the vehicle now.";
+      if (text.toLowerCase().includes('gate') || text.toLowerCase().includes('code')) {
+        reply = "Copy that, I will enter gate code at the barrier.";
+      }
+      setChatMessages(prev => [...prev, { sender: 'tech', text: reply }]);
+    }, 1200);
+  };
+
+  // Start Job with OTP
+  const verifyOtpAndStart = () => {
+    setShowOtpVerified(true);
+    setTimeout(() => {
+      setShowOtpVerified(false);
+      setCurrentStatus('IN_PROGRESS');
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative grid-bg">
+      {/* Header */}
+      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-2 font-extrabold text-lg text-white">
+              <Sparkles size={18} className="text-indigo-400" />
+              <span>HomeSphere AI</span>
+            </Link>
+            <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">Live Tracking</span>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+            <span>Booking ID:</span>
+            <span className="text-indigo-400 font-mono">#HS-9942A-DEL</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Track Workspace */}
+      <main className="max-w-7xl mx-auto px-6 py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+        
+        {/* Map Simulator Canvas (7 cols) */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
+          <div className="rounded-2xl glass p-5 border border-white/5 relative overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-900 mb-4">
+              <div className="flex items-center gap-2">
+                <MapPin size={18} className="text-cyan-400" />
+                <span className="font-bold text-sm">Live Location Tracking Canvas</span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">WebSocket Coords (Active)</span>
+            </div>
+
+            <div className="rounded-xl border border-slate-900 bg-black/40 overflow-hidden relative">
+              <canvas 
+                ref={canvasRef} 
+                width={380} 
+                height={220} 
+                className="w-full h-[220px] block"
+              />
+              <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 flex flex-col">
+                <span>Latitude: {techPos.x.toFixed(4)}</span>
+                <span>Longitude: {techPos.y.toFixed(4)}</span>
+              </div>
+            </div>
+
+            {/* ETA indicator */}
+            <div className="grid grid-cols-3 gap-4 mt-5 p-4 rounded-xl bg-black/20 border border-slate-900">
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block uppercase">Status</span>
+                <span className="text-xs font-bold text-cyan-400 mt-1 block">
+                  {currentStatus === 'DEPARTED' && 'En Route'}
+                  {currentStatus === 'ARRIVED' && 'Arrived'}
+                  {currentStatus === 'IN_PROGRESS' && 'Job Active'}
+                  {currentStatus === 'COMPLETED' && 'Job Finished'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block uppercase">Estimated Arrival</span>
+                <span className="text-xs font-bold text-slate-200 mt-1 block">
+                  {eta > 0 ? `${eta} mins` : 'Arrived'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block uppercase">Verification OTP</span>
+                <span className="text-xs font-bold text-indigo-400 mt-1 block font-mono">
+                  {otp}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline Tracking */}
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Activity Timeline</h3>
+            <div className="flex flex-col gap-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-800">
+              
+              {[
+                { key: 'ACCEPTED', label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
+                { key: 'DEPARTED', label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
+                { key: 'ARRIVED', label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
+                { key: 'IN_PROGRESS', label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
+                { key: 'COMPLETED', label: 'Job Finalized', desc: 'Leakage verified resolved. GST invoice generated successfully.', time: '---' }
+              ].map((step, idx) => {
+                const isFinished = 
+                  (step.key === 'ACCEPTED') || 
+                  (step.key === 'DEPARTED' && (currentStatus !== 'ACCEPTED')) ||
+                  (step.key === 'ARRIVED' && (currentStatus !== 'ACCEPTED' && currentStatus !== 'DEPARTED')) ||
+                  (step.key === 'IN_PROGRESS' && (currentStatus === 'IN_PROGRESS' || currentStatus === 'COMPLETED')) ||
+                  (step.key === 'COMPLETED' && currentStatus === 'COMPLETED');
+
+                const isCurrent = currentStatus === step.key;
+
+                return (
+                  <div key={idx} className="flex gap-4 relative">
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 z-10 transition-colors ${
+                      isFinished 
+                        ? 'bg-indigo-600 border-indigo-500 text-white' 
+                        : isCurrent
+                        ? 'bg-slate-950 border-cyan-400 text-cyan-400'
+                        : 'bg-slate-950 border-slate-800 text-slate-600'
+                    }`}>
+                      {isFinished ? <CheckCircle2 size={12} className="fill-indigo-600" /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                    </div>
+                    
+                    <div className="flex-1 flex flex-col gap-0.5">
+                      <div className="flex justify-between items-center">
+                        <span className={`font-bold text-xs ${isCurrent ? 'text-cyan-400' : 'text-slate-200'}`}>{step.label}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{step.time}</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 leading-normal mt-0.5">{step.desc}</span>
+
+                      {/* Trigger Actions for Simulation */}
+                      {step.key === 'ARRIVED' && isCurrent && (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={verifyOtpAndStart}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <Play size={10} />
+                            <span>Submit OTP ({otp}) & Start Job</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {step.key === 'IN_PROGRESS' && isCurrent && (
+                        <div className="mt-2.5 flex flex-col gap-1.5">
+                          <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                            <span>Job Completion Progress</span>
+                            <span>{jobProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${jobProgress}%` }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {step.key === 'COMPLETED' && isFinished && (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => setInvoiceOpen(true)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <Download size={10} />
+                            <span>Download GST Invoice (PDF)</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Provider details & Sockets Chat (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          {/* Provider Card */}
+          <div className="rounded-2xl glass p-5 border border-white/5 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-900">
+              <div className="flex gap-2.5 items-center">
+                <div className="w-10 h-10 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-sm">
+                  RP
+                </div>
+                <div className="flex flex-col">
+                  <h4 className="font-bold text-sm text-slate-200">Ramesh Patel</h4>
+                  <span className="text-[10px] text-slate-500">Verified Plumber • 11 yrs exp</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 p-2 bg-slate-900 border border-slate-800 rounded-xl">
+                <ShieldCheck size={14} className="text-emerald-400" />
+                <span className="text-[10px] text-slate-400 font-bold">Vaccinated & KYC Verified</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1 text-slate-400">
+                <Phone size={12} />
+                <span>+91 98450 12842</span>
+              </div>
+              <span className="text-slate-500">Hourly Rate: ₹400/hr</span>
+            </div>
+          </div>
+
+          {/* Sockets Chat simulator */}
+          <div className="rounded-2xl glass p-5 border border-white/5 flex flex-col h-[280px] overflow-hidden">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-900 mb-3">
+              <div className="flex items-center gap-1.5">
+                <MessageSquare size={16} className="text-indigo-400" />
+                <span className="font-bold text-xs text-slate-300">Live Chat with Ramesh</span>
+              </div>
+              <span className="text-[9px] text-emerald-400 font-mono animate-pulse">● Socket Connected</span>
+            </div>
+
+            {/* Chat message box */}
+            <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-3 text-xs">
+              {chatMessages.map((msg, i) => (
+                <div 
+                  key={i} 
+                  className={`max-w-[85%] p-2 rounded-xl text-left leading-relaxed ${
+                    msg.sender === 'tech' 
+                      ? 'bg-slate-900 border border-slate-800 text-slate-300 mr-auto rounded-tl-none' 
+                      : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              ))}
+            </div>
+
+            {/* Chat Input */}
+            <div className="pt-2 border-t border-slate-900 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Message Ramesh..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
+                className="flex-1 bg-black/30 border border-slate-800 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button
+                onClick={handleChatSend}
+                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              >
+                <Send size={12} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Invoice PDF Modal Simulator */}
+      <AnimatePresence>
+        {invoiceOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-lg rounded-2xl glass-premium p-6 border-white/10 glow-primary shadow-2xl relative text-left"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-indigo-400" />
+                  <span className="font-extrabold text-sm tracking-widest text-slate-200">GST REPAIR INVOICE</span>
+                </div>
+                <button 
+                  onClick={() => setInvoiceOpen(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-slate-400 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Invoice body */}
+              <div className="mt-4 flex flex-col gap-4 text-xs">
+                <div className="flex justify-between border-b border-slate-900 pb-3">
+                  <div>
+                    <h5 className="font-bold text-slate-200 text-sm">HomeSphere AI Pvt Ltd</h5>
+                    <span className="text-slate-500 mt-1 block">GSTIN: 36AAAAA1111A1Z0</span>
+                    <span className="text-slate-500 block">Hitec City, Hyderabad, IN</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-slate-300">Invoice: HS-2026-9942</span>
+                    <span className="text-slate-500 mt-1 block">Date: {new Date().toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-slate-400">Customer Details:</span>
+                  <span className="text-slate-200 font-semibold">Jane Doe</span>
+                  <span className="text-slate-500">Flat 405, Rainbow Residency, Hyderabad</span>
+                </div>
+
+                <table className="w-full border-collapse mt-2 text-left">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-500 text-[10px] uppercase font-bold">
+                      <th className="pb-2">Description</th>
+                      <th className="pb-2 text-right">Hours/Qty</th>
+                      <th className="pb-2 text-right">Rate</th>
+                      <th className="pb-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900">
+                    <tr className="text-slate-300">
+                      <td className="py-2.5">Plumbing Diagnosis & Joint Restoration</td>
+                      <td className="py-2.5 text-right">1 hr</td>
+                      <td className="py-2.5 text-right">₹400</td>
+                      <td className="py-2.5 text-right">₹400</td>
+                    </tr>
+                    <tr className="text-slate-300">
+                      <td className="py-2.5">P-Trap Gasket Rings & Sealant Gels</td>
+                      <td className="py-2.5 text-right">1 Unit</td>
+                      <td className="py-2.5 text-right">₹320</td>
+                      <td className="py-2.5 text-right">₹320</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-3 text-slate-400 text-right items-end">
+                  <div className="w-48 flex justify-between">
+                    <span>Subtotal:</span>
+                    <span className="text-slate-200">₹720</span>
+                  </div>
+                  <div className="w-48 flex justify-between">
+                    <span>CGST (9%):</span>
+                    <span className="text-slate-200">₹64.80</span>
+                  </div>
+                  <div className="w-48 flex justify-between">
+                    <span>SGST (9%):</span>
+                    <span className="text-slate-200">₹64.80</span>
+                  </div>
+                  <div className="w-48 flex justify-between border-t border-slate-900 pt-2 font-bold text-sm text-indigo-400">
+                    <span>Grand Total:</span>
+                    <span>₹849.60</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-indigo-950/20 border border-indigo-900/30 text-indigo-400 rounded-xl text-center font-semibold text-[10px]">
+                  Thank you for using HomeSphere AI. Paid via UPI.
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

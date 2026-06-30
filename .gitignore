@@ -1,0 +1,12 @@
+# Node
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.*
+
+# Secrets
+apps/api/secrets/
+apps/api/secrets/*.json
+homesphere.db

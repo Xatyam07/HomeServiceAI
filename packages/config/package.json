@@ -1,0 +1,7 @@
+{
+  "name": "@homesphere/config",
+  "version": "1.0.0",
+  "description": "Shared configurations for HomeSphere AI projects",
+  "private": true,
+  "license": "UNLICENSED"
+}

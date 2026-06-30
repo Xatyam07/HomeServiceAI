@@ -1,0 +1,19 @@
+{
+  "name": "homesphere-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HomeSphere AI Monorepo Workspace",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.4"
+  }
+}
