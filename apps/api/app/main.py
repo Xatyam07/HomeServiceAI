@@ -48,9 +48,25 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin Suite"])
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["Uploads"])
 
-# Mount static folder
-os.makedirs("/code/static/uploads", exist_ok=True)
-app.mount("/static", StaticFiles(directory="/code/static"), name="static")
+# Configure Cloudinary
+if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET:
+    try:
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+            secure=True
+        )
+        print("Cloudinary configured successfully during startup.")
+    except Exception as e:
+        print(f"Warning: Cloudinary configuration failed during startup: {e}")
+
+# Mount static folder only if it exists
+static_dir = "/code/static"
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+else:
+    print("Warning: /code/static does not exist. Skipping mounting static files.")
 
 # AI Routers
 app.include_router(diagnosis.router, prefix="/api/ai/diagnose", tags=["AI Diagnosis"])
