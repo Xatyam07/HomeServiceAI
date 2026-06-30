@@ -7,14 +7,61 @@ import {
   Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import { useParams } from 'next/navigation';
 
 export default function TrackBooking() {
+  const { token } = useAuth();
+  const params = useParams();
+  const bookingId = params?.id;
+  const [bookingDetails, setBookingDetails] = useState<any>(null);
+
   // Timeline status states
-  const [currentStatus, setCurrentStatus] = useState<'ACCEPTED' | 'DEPARTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED'>('DEPARTED');
+  const [currentStatus, setCurrentStatus] = useState<string>('DEPARTED');
   const [eta, setEta] = useState(8);
-  const [otp, setOtp] = useState('7742');
+  const [otp, setOtp] = useState('----');
   const [showOtpVerified, setShowOtpVerified] = useState(false);
   const [jobProgress, setJobProgress] = useState(0);
+
+  useEffect(() => {
+    if (!token || !bookingId || bookingId === 'demo-booking-101') {
+      setOtp('7742');
+      return;
+    }
+
+    const loadBookingData = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setBookingDetails(data);
+          if (data.status) {
+            setCurrentStatus(data.status);
+          }
+          if (data.eta_minutes !== null) {
+            setEta(data.eta_minutes);
+          }
+        }
+        
+        // Fetch OTP
+        const otpRes = await fetch(`http://localhost:8000/api/bookings/${bookingId}/otp`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (otpRes.ok) {
+          const otpData = await otpRes.json();
+          setOtp(otpData.otp);
+        }
+      } catch (err) {
+        console.error("Failed to load booking telemetry:", err);
+      }
+    };
+
+    loadBookingData();
+    const interval = setInterval(loadBookingData, 4000);
+    return () => clearInterval(interval);
+  }, [token, bookingId]);
 
   // Chat with technician
   const [chatInput, setChatInput] = useState('');
@@ -193,12 +240,49 @@ export default function TrackBooking() {
   };
 
   // Start Job with OTP
-  const verifyOtpAndStart = () => {
-    setShowOtpVerified(true);
-    setTimeout(() => {
-      setShowOtpVerified(false);
-      setCurrentStatus('IN_PROGRESS');
-    }, 1500);
+  const verifyOtpAndStart = async () => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ otp })
+      });
+      if (res.ok) {
+        setShowOtpVerified(true);
+        setTimeout(() => {
+          setShowOtpVerified(false);
+          setCurrentStatus('IN_PROGRESS');
+        }, 1500);
+      } else {
+        const data = await res.json();
+        alert(`Failed to verify: ${data.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const confirmCompletion = async () => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/confirm-completion`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        alert("Completion confirmed! Payout released to technician.");
+        setCurrentStatus('PAYMENT_SUCCESSFUL');
+      } else {
+        const data = await res.json();
+        alert(`Failed to confirm: ${data.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -280,20 +364,14 @@ export default function TrackBooking() {
             <div className="flex flex-col gap-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-800">
               
               {[
-                { key: 'ACCEPTED', label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
-                { key: 'DEPARTED', label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
-                { key: 'ARRIVED', label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
-                { key: 'IN_PROGRESS', label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
-                { key: 'COMPLETED', label: 'Job Finalized', desc: 'Leakage verified resolved. GST invoice generated successfully.', time: '---' }
+                { key: 'ACCEPTED', dbKeys: ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
+                { key: 'ON_THE_WAY', dbKeys: ['ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
+                { key: 'ARRIVED', dbKeys: ['ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
+                { key: 'IN_PROGRESS', dbKeys: ['IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
+                { key: 'COMPLETED', dbKeys: ['COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Job Finalized', desc: 'Leakage verified resolved. GST invoice generated successfully.', time: '---' }
               ].map((step, idx) => {
-                const isFinished = 
-                  (step.key === 'ACCEPTED') || 
-                  (step.key === 'DEPARTED' && (currentStatus !== 'ACCEPTED')) ||
-                  (step.key === 'ARRIVED' && (currentStatus !== 'ACCEPTED' && currentStatus !== 'DEPARTED')) ||
-                  (step.key === 'IN_PROGRESS' && (currentStatus === 'IN_PROGRESS' || currentStatus === 'COMPLETED')) ||
-                  (step.key === 'COMPLETED' && currentStatus === 'COMPLETED');
-
-                const isCurrent = currentStatus === step.key;
+                const isFinished = step.dbKeys.includes(currentStatus);
+                const isCurrent = currentStatus === step.key || (step.key === 'COMPLETED' && currentStatus === 'PAYMENT_SUCCESSFUL') || (step.key === 'ON_THE_WAY' && currentStatus === 'DEPARTED');
 
                 return (
                   <div key={idx} className="flex gap-4 relative">
@@ -340,7 +418,7 @@ export default function TrackBooking() {
                       )}
 
                       {step.key === 'COMPLETED' && isFinished && (
-                        <div className="mt-3 flex gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             onClick={() => setInvoiceOpen(true)}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
@@ -348,6 +426,15 @@ export default function TrackBooking() {
                             <Download size={10} />
                             <span>Download GST Invoice (PDF)</span>
                           </button>
+
+                          {currentStatus === 'COMPLETED' && (
+                            <button
+                              onClick={confirmCompletion}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-colors"
+                            >
+                              Confirm Completion & Payout
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

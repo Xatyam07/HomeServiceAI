@@ -5,11 +5,15 @@ import Link from 'next/link';
 import { 
   Zap, Wrench, Sparkles, User, MapPin, Clock, Star, 
   DollarSign, Check, X, Bell, Calendar, TrendingUp, 
-  ChevronRight, Award, MessageSquare, ShieldCheck, Download
+  ChevronRight, Award, MessageSquare, ShieldCheck, Download, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
-export default function ProviderDashboard() {
+function ProviderDashboardContent() {
+  const { user, logout, token } = useAuth();
+  
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
   const [activeJobs, setActiveJobs] = useState<any[]>([
@@ -89,17 +93,7 @@ export default function ProviderDashboard() {
   const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'done'>('idle');
 
   // Professional Verification State
-  const [workerStatus, setWorkerStatus] = useState<'APPROVED' | 'PENDING'>('APPROVED');
-
-  useEffect(() => {
-    // Check url search parameters for mock testing
-    const params = new URLSearchParams(window.location.search);
-    const statusParam = params.get('status');
-    const emailParam = params.get('email');
-    if (statusParam === 'PENDING' || emailParam === 'rahul.verma@example.com' || emailParam === 'rahul') {
-      setWorkerStatus('PENDING');
-    }
-  }, []);
+  const workerStatus = user?.status || 'APPROVED';
 
   const triggerPayout = () => {
     setPayoutStatus('processing');
@@ -110,7 +104,7 @@ export default function ProviderDashboard() {
     }, 1500);
   };
 
-  if (workerStatus === 'PENDING') {
+  if (workerStatus === 'PENDING' || workerStatus === 'PENDING_APPROVAL') {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center grid-bg p-6 text-center">
         <div className="w-full max-w-lg rounded-2xl glass-premium p-8 border-white/10 glow-primary shadow-2xl flex flex-col items-center gap-6">
@@ -128,23 +122,31 @@ export default function ProviderDashboard() {
           <div className="w-full p-4 bg-indigo-950/20 border border-indigo-900/30 rounded-xl text-left text-xs flex flex-col gap-2">
             <div className="flex justify-between">
               <span className="text-slate-500">Applicant:</span>
-              <span className="font-semibold text-slate-200">Rahul Verma</span>
+              <span className="font-semibold text-slate-200">{user?.name || 'Rahul Verma'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Service Category:</span>
-              <span className="font-semibold text-slate-200">Electrician</span>
+              <span className="font-semibold text-slate-200">Onboarding Candidate</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Document Checks:</span>
               <span className="font-bold text-yellow-400 animate-pulse">PENDING AUDIT</span>
             </div>
           </div>
-          <Link 
-            href="/"
-            className="w-full py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 font-bold rounded-xl text-sm transition-colors"
-          >
-            Return to Homepage
-          </Link>
+          <div className="flex flex-col gap-2.5 w-full">
+            <button 
+              onClick={logout}
+              className="w-full py-3 bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/30 font-bold rounded-xl text-sm transition-colors"
+            >
+              Sign Out
+            </button>
+            <Link 
+              href="/"
+              className="w-full py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 font-bold rounded-xl text-sm transition-colors"
+            >
+              Return to Homepage
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -177,8 +179,20 @@ export default function ProviderDashboard() {
               </button>
             </div>
             
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs">
-              RP
+            <button 
+              onClick={logout}
+              className="p-2.5 rounded-xl bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/30 flex items-center gap-1 transition-all text-xs font-bold"
+            >
+              <LogOut size={14} />
+              <span>Sign Out</span>
+            </button>
+
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs overflow-hidden border border-slate-800">
+              {user?.profile_photo ? (
+                <img src={user.profile_photo} alt="profile" className="w-full h-full object-cover" />
+              ) : (
+                <span>{user?.name?.split(' ').map((n: string) => n[0]).join('') || 'RP'}</span>
+              )}
             </div>
           </div>
         </div>
@@ -397,5 +411,13 @@ export default function ProviderDashboard() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function ProviderDashboard() {
+  return (
+    <ProtectedRoute allowedRoles={["PROVIDER"]}>
+      <ProviderDashboardContent />
+    </ProtectedRoute>
   );
 }

@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Zap, Wrench, Paintbrush, Flame, Cpu, ShieldCheck, 
   MapPin, Clock, ArrowRight, Star, Sun, Moon, 
-  MessageSquare, Send, Sparkles, AlertTriangle, Shield, CheckCircle2, ChevronDown
+  MessageSquare, Send, Sparkles, AlertTriangle, Shield, CheckCircle2, ChevronDown, LogOut, User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from './theme-provider';
+import { useAuth } from '@/context/AuthContext';
 
 // Popular services configurations
 const services = [
@@ -29,12 +30,77 @@ const faqs = [
 
 export default function LandingPage() {
   const { theme, toggleTheme } = useTheme();
+  const { user, logout } = useAuth();
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   
   // AI assistant simulator state
   const [query, setQuery] = useState('');
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnosisResult, setDiagnosisResult] = useState<any>(null);
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+
+  const getNavLinks = () => {
+    if (!user) {
+      return [
+        { name: 'Services', href: '#services', action: null },
+        { name: 'AI Assistant', href: '#ai-diagnose', action: null },
+        { name: 'Pricing', href: '#pricing', action: null },
+        { name: 'FAQ', href: '#faq', action: null }
+      ];
+    }
+
+    if (user.role === 'CUSTOMER') {
+      return [
+        { name: 'Home', href: '#', action: null },
+        { name: 'Services', href: '#services', action: null },
+        { name: 'Bookings', href: '/customer/dashboard', action: null },
+        { name: 'AI Assistant', href: '#ai-diagnose', action: null },
+        { name: 'Profile', href: null, action: () => setProfileDropdownOpen(true) },
+        { name: 'Notifications', href: null, action: () => alert("No new notifications.") },
+        { name: 'Customer Dashboard', href: '/customer/dashboard', action: null },
+        { name: 'Logout', href: null, action: () => logout() }
+      ];
+    }
+
+    if (user.role === 'PROVIDER') {
+      const isPending = user.status === 'PENDING' || user.status === 'PENDING_APPROVAL';
+      const targetDashboard = isPending ? '/professional/pending' : '/professional/dashboard';
+      return [
+        { name: 'Jobs', href: targetDashboard, action: null },
+        { name: 'Calendar', href: targetDashboard, action: null },
+        { name: 'Wallet', href: targetDashboard, action: null },
+        { name: 'Messages', href: targetDashboard, action: null },
+        { name: 'Professional Dashboard', href: targetDashboard, action: null },
+        { name: 'Profile', href: null, action: () => setProfileDropdownOpen(true) },
+        { name: 'Logout', href: null, action: () => logout() }
+      ];
+    }
+
+    // Admin / SUPER_ADMIN
+    return [
+      { name: 'Admin Dashboard', href: '/admin/dashboard', action: null },
+      { name: 'Users', href: '/admin/dashboard', action: null },
+      { name: 'Professionals', href: '/admin/dashboard', action: null },
+      { name: 'Bookings', href: '/admin/dashboard', action: null },
+      { name: 'Payments', href: '/admin/dashboard', action: null },
+      { name: 'Analytics', href: '/admin/dashboard', action: null },
+      { name: 'Settings', href: '/admin/dashboard', action: null },
+      { name: 'Logout', href: null, action: () => logout() }
+    ];
+  };
+
+  const handleLinkClick = (e: React.MouseEvent, item: any) => {
+    if (item.action) {
+      e.preventDefault();
+      item.action();
+    } else if (item.href && item.href.startsWith('#')) {
+      e.preventDefault();
+      const element = document.getElementById(item.href.substring(1));
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
 
   const presets = [
     { text: "My AC isn't cooling and sounds weird.", label: "AC Not Cooling" },
@@ -121,11 +187,43 @@ export default function LandingPage() {
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-300">
-            <a href="#services" className="hover:text-indigo-500 transition-colors">Services</a>
-            <a href="#ai-diagnose" className="hover:text-indigo-500 transition-colors">AI Assistant</a>
-            <a href="#pricing" className="hover:text-indigo-500 transition-colors">Pricing</a>
-            <a href="#faq" className="hover:text-indigo-500 transition-colors">FAQ</a>
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">
+            {getNavLinks().map((item, index) => {
+              if (item.href) {
+                if (item.href.startsWith('#')) {
+                  return (
+                    <a 
+                      key={index}
+                      href={item.href} 
+                      onClick={(e) => handleLinkClick(e, item)}
+                      className="hover:text-indigo-500 transition-colors"
+                    >
+                      {item.name}
+                    </a>
+                  );
+                } else {
+                  return (
+                    <Link 
+                      key={index}
+                      href={item.href}
+                      className="hover:text-indigo-500 transition-colors"
+                    >
+                      {item.name}
+                    </Link>
+                  );
+                }
+              } else {
+                return (
+                  <button 
+                    key={index}
+                    onClick={(e) => handleLinkClick(e, item)}
+                    className="hover:text-indigo-500 transition-colors cursor-pointer bg-transparent border-none p-0 text-sm font-medium text-slate-600 dark:text-slate-300"
+                  >
+                    {item.name}
+                  </button>
+                );
+              }
+            })}
           </nav>
 
           <div className="flex items-center gap-4">
@@ -135,12 +233,108 @@ export default function LandingPage() {
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <Link 
-              href="/customer/dashboard"
-              className="px-4.5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-            >
-              Dashboard
-            </Link>
+
+            {!user ? (
+              <>
+                <motion.button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const servicesSec = document.getElementById('services');
+                    if (servicesSec) {
+                      servicesSec.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  whileHover={{ 
+                    scale: 1.03,
+                    boxShadow: "0 0 15px rgba(99, 102, 241, 0.35)",
+                  }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 text-white shadow-lg shadow-indigo-600/10 cursor-pointer flex items-center justify-center border border-white/10"
+                >
+                  Explore Home Services
+                </motion.button>
+                <Link 
+                  href="/login"
+                  className="px-4.5 py-2 text-xs font-bold rounded-xl bg-white/5 border border-slate-800 text-slate-300 hover:text-white transition-colors"
+                >
+                  Login
+                </Link>
+                <Link 
+                  href="/signup"
+                  className="px-4.5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                >
+                  Sign Up
+                </Link>
+              </>
+            ) : (
+              <div className="relative">
+                <div 
+                  className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs overflow-hidden cursor-pointer border border-slate-800"
+                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                >
+                  {user.profile_photo ? (
+                    <img src={user.profile_photo} alt="profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{user.name?.split(' ').map((n: string) => n[0]).join('') || 'US'}</span>
+                  )}
+                </div>
+
+                <AnimatePresence>
+                  {profileDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-48 rounded-xl glass-premium border border-white/10 shadow-2xl p-2 z-50 text-left flex flex-col gap-1 text-xs"
+                    >
+                      <div className="px-3 py-2 border-b border-white/5 mb-1 flex flex-col">
+                        <span className="font-bold text-slate-200 truncate">{user.name}</span>
+                        <span className="text-[10px] text-slate-500 truncate">{user.email}</span>
+                      </div>
+                      <Link 
+                        href={user.role === 'PROVIDER' ? (user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? '/professional/pending' : '/professional/dashboard') : user.role === 'CUSTOMER' ? '/customer/dashboard' : '/admin/dashboard'}
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors"
+                      >
+                        Dashboard
+                      </Link>
+                      <button 
+                        onClick={() => { setProfileDropdownOpen(false); alert("Profile settings can be managed directly in the dashboard profile editor."); }}
+                        className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
+                      >
+                        Profile
+                      </button>
+                      <button 
+                        onClick={() => { setProfileDropdownOpen(false); alert("Settings configuration panel is coming soon!"); }}
+                        className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
+                      >
+                        Settings
+                      </button>
+                      <button 
+                        onClick={() => { setProfileDropdownOpen(false); alert("You have no new notifications."); }}
+                        className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
+                      >
+                        Notifications
+                      </button>
+                      <button 
+                        onClick={() => { setProfileDropdownOpen(false); alert("For support, please email support@homesphere.ai"); }}
+                        className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
+                      >
+                        Help
+                      </button>
+                      <button 
+                        onClick={() => { setProfileDropdownOpen(false); logout(); }}
+                        className="w-full px-3 py-2 hover:bg-red-500/10 text-red-400 hover:text-red-300 rounded-lg transition-colors text-left font-bold border-t border-white/5 mt-1 pt-2"
+                      >
+                        Logout
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -167,7 +361,15 @@ export default function LandingPage() {
 
           <div className="flex flex-wrap gap-4 mt-2">
             <Link 
-              href="/customer/dashboard"
+              href={
+                !user 
+                  ? '/login' 
+                  : user.role === 'PROVIDER' 
+                  ? (user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? '/professional/pending' : '/professional/dashboard')
+                  : user.role === 'CUSTOMER'
+                  ? '/customer/dashboard'
+                  : '/admin/dashboard'
+              }
               className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-semibold rounded-xl shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2 group"
             >
               <span>Explore Dashboard</span>

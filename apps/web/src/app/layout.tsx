@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "./theme-provider";
-import RoleSelector from "@/components/RoleSelector";
+import { AuthProvider } from "@/context/AuthContext";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -24,10 +24,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark h-full antialiased">
       <body className={`${outfit.className} min-h-full flex flex-col`}>
-        <ThemeProvider>
-          {children}
-          <RoleSelector />
-        </ThemeProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
