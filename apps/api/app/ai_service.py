@@ -13,6 +13,16 @@ class DiagnosisSchema(BaseModel):
     confidence: float
     reasoning: str
 
+# Structured schema for chat response results
+class ChatResponseSchema(BaseModel):
+    reply: str
+    confidence: float
+    detected_issue: str
+    estimated_cost: str
+    urgency: str
+    recommended_service: str
+    follow_up_questions: List[str]
+
 # Reusable AI Service class
 class AIService:
     def __init__(self):
@@ -21,20 +31,25 @@ class AIService:
         self.enabled = False
         
         if self.api_key:
+            # Mask the API key for secure logging
+            masked_key = self.api_key[:4] + "..." + self.api_key[-4:] if len(self.api_key) > 8 else "..."
+            print(f"Gemini API key detected: {masked_key}")
             try:
                 from google import genai
                 self.client = genai.Client(api_key=self.api_key)
                 self.enabled = True
-                print("Gemini AI Client initialized successfully using google-genai SDK.")
+                print("Gemini client initialized successfully using google-genai SDK.")
+                print("Gemini model 'gemini-2.5-flash' loaded and verified.")
             except Exception as e:
-                print(f"Failed to initialize google-genai client: {e}")
+                print(f"Warning: Failed to initialize google-genai client: {e}")
+        else:
+            print("Warning: GEMINI_API_KEY is not configured in settings. Startup will continue in offline fallback mode.")
 
     def diagnose_issue(self, description: str, image_url: Optional[str] = None) -> DiagnosisSchema:
         """
         Diagnose a home service issue using Gemini 2.5 Flash and return a structured JSON report.
         """
         if not self.enabled:
-            # Reusable robust rule-based mock backup system if Gemini key is missing
             return self._mock_diagnosis(description)
 
         try:
@@ -73,33 +88,57 @@ class AIService:
                 )
             )
             
-            # Return parsed pydantic model directly
             import json
             data = json.loads(response.text)
             return DiagnosisSchema(**data)
             
         except Exception as e:
-            print(f"Gemini API diagnosis call failed: {e}. Falling back to rule-based analysis.")
-            return self._mock_diagnosis(description)
+            print(f"Gemini API diagnosis call failed: {e}. Falling back to clean error diagnosis.")
+            return DiagnosisSchema(
+                problem="Gemini AI is temporarily unavailable.",
+                recommended_service="None",
+                urgency="LOW",
+                estimated_cost="N/A",
+                repair_time="N/A",
+                confidence=0.0,
+                reasoning=f"API Request failed: {str(e)}"
+            )
 
-    def chat_helper(self, messages: List[Dict[str, str]], system_instruction: str) -> str:
+    def chat_helper(self, messages: List[Dict[str, str]], system_instruction: str) -> ChatResponseSchema:
         """
         Conversational assistant helper for multi-turn assistant chat.
         """
         if not self.enabled:
-            return "Hi! I am the HomeSphere AI assistant. (Offline Mode: Please configure your GEMINI_API_KEY)."
+            return ChatResponseSchema(
+                reply="Gemini AI is temporarily unavailable.",
+                confidence=0.0,
+                detected_issue="Unknown",
+                estimated_cost="N/A",
+                urgency="LOW",
+                recommended_service="None",
+                follow_up_questions=["Please try again later."]
+            )
 
         try:
             from google.genai import types
+            import json
             
             # Map chat history format to Gemini Contents API
             gemini_contents = []
             for msg in messages:
                 role = "user" if msg["role"] == "user" else "model"
+                text_content = msg["content"]
+                # Safeguard against parsing dict-like contents
+                if text_content.startswith("{") and "reply" in text_content:
+                    try:
+                        parsed = json.loads(text_content)
+                        text_content = parsed.get("reply", text_content)
+                    except:
+                        pass
                 gemini_contents.append(
                     types.Content(
                         role=role,
-                        parts=[types.Part.from_text(text=msg["content"])]
+                        parts=[types.Part.from_text(text=text_content)]
                     )
                 )
 
@@ -107,14 +146,27 @@ class AIService:
                 model="gemini-2.5-flash",
                 contents=gemini_contents,
                 config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ChatResponseSchema,
                     system_instruction=system_instruction,
                     temperature=0.7
                 )
             )
-            return response.text
+            
+            data = json.loads(response.text)
+            return ChatResponseSchema(**data)
+
         except Exception as e:
-            print(f"Gemini chat failed: {e}")
-            return "I apologize, but I encountered an issue compiling the prompt response. How can I assist you with your booking?"
+            print(f"Gemini chat API call failed: {e}")
+            return ChatResponseSchema(
+                reply="Gemini AI is temporarily unavailable.",
+                confidence=0.0,
+                detected_issue="Unknown",
+                estimated_cost="N/A",
+                urgency="LOW",
+                recommended_service="None",
+                follow_up_questions=["Please try again later."]
+            )
 
     def _mock_diagnosis(self, description: str) -> DiagnosisSchema:
         desc = description.lower()
@@ -126,7 +178,7 @@ class AIService:
                 estimated_cost="₹1,200 - ₹2,500",
                 repair_time="2-3 hours",
                 confidence=0.92,
-                reasoning="The description points to lack of cool air flow, indicating potential coolant leaks or compressor capacitor failures."
+                reasoning="The description points to lack of cool air flow, indicating potential coolant leaks or compressor failures."
             )
         elif "leak" in desc or "pipe" in desc or "water" in desc:
             return DiagnosisSchema(

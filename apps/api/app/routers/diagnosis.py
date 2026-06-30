@@ -74,4 +74,13 @@ async def chat_interaction(payload: ChatRequest):
     msgs_dict = [{"role": m.role, "content": m.content} for m in payload.messages]
     
     ai_response = ai_service.chat_helper(msgs_dict, system_prompt)
-    return {"response": ai_response}
+    return {
+        "reply": ai_response.reply,
+        "response": ai_response.reply,
+        "confidence": ai_response.confidence,
+        "detected_issue": ai_response.detected_issue,
+        "estimated_cost": ai_response.estimated_cost,
+        "urgency": ai_response.urgency,
+        "recommended_service": ai_response.recommended_service,
+        "follow_up_questions": ai_response.follow_up_questions
+    }

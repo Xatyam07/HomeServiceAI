@@ -234,6 +234,12 @@ function DashboardContent() {
   const [chatMessages, setChatMessages] = useState<any[]>([
     { sender: 'ai', text: "Hello! I am your HomeSphere AI Assistant. How can I help you today? (e.g. My AC isn't cooling, tap is leaking...)" }
   ]);
+  const [suggestedReplies, setSuggestedReplies] = useState<Array<{label: string, cmd: string}>>([
+    { label: "🚰 Sink Leak", cmd: "Kitchen sink is leaking under the wooden cabinet" },
+    { label: "❄️ AC Rattling", cmd: "AC is running but making a rattling noise" },
+    { label: "⚡ Switch Sparks", cmd: "Sparks coming from the bedroom light switch" },
+    { label: "💳 Service Rates", cmd: "Show me base service hourly rates" }
+  ]);
 
   // Read URL query parameters
   useEffect(() => {
@@ -461,7 +467,7 @@ function DashboardContent() {
 
     try {
       const data = await api.post('/api/ai/diagnose/chat', { messages: history });
-      const response = data.response;
+      const response = data.reply || data.response;
 
       // Extract recommended service to dynamically trigger categories configuration
       const lowerRes = response.toLowerCase();
@@ -475,6 +481,14 @@ function DashboardContent() {
         setSelectedService("Pest Control");
       } else if (lowerRes.includes("painting") || lowerRes.includes("painter")) {
         setSelectedService("Painting");
+      }
+
+      // Populate suggested action replies dynamically using Gemini follow-up questions
+      if (data.follow_up_questions && data.follow_up_questions.length > 0) {
+        setSuggestedReplies(data.follow_up_questions.map((q: string) => ({
+          label: q.length > 25 ? q.substring(0, 22) + "..." : q,
+          cmd: q
+        })));
       }
 
       setChatMessages(prev => [...prev, { sender: 'ai', text: response }]);
@@ -1421,12 +1435,7 @@ function DashboardContent() {
 
               {/* Suggested quick actions */}
               <div className="px-3 py-2 border-t border-white/5 bg-slate-950/40 flex flex-wrap gap-1.5 text-[9px] text-left">
-                {[
-                  { label: "🚰 Sink Leak", cmd: "Kitchen sink is leaking under the wooden cabinet" },
-                  { label: "❄️ AC Rattling", cmd: "AC is running but making a rattling noise" },
-                  { label: "⚡ Switch Sparks", cmd: "Sparks coming from the bedroom light switch" },
-                  { label: "💳 Service Rates", cmd: "Show me base service hourly rates" }
-                ].map((s, i) => (
+                {suggestedReplies.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => handleChatSend(s.cmd)}
