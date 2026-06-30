@@ -61,3 +61,4 @@ npm run dev --workspace=homesphere-web
 ```
 Visit http://localhost:3000 to interact with the application.
 # HomeSphereAI
+# HomeServiceAI
