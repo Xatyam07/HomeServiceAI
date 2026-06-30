@@ -762,7 +762,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6 text-center text-xs text-slate-500 border-t border-slate-200/10 dark:border-slate-800/20 pt-6 mt-8">
-          © {new Date().getFullYear()} HomeSphere AI. Pair programmed with Antigravity.
+          © 2026 HomeSphere AI. Pair programmed with Antigravity.
         </div>
       </footer>
     </div>

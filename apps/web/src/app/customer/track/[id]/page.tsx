@@ -9,6 +9,17 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { useParams } from 'next/navigation';
+import { useTheme } from '@/app/theme-provider';
+import dynamic from 'next/dynamic';
+
+const MapComponent = dynamic(() => import('@/components/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-slate-900/40 border border-white/5 rounded-2xl animate-pulse">
+      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Syncing map view...</span>
+    </div>
+  ),
+});
 
 export default function TrackBooking() {
   const { token } = useAuth();
@@ -22,6 +33,11 @@ export default function TrackBooking() {
   const [otp, setOtp] = useState('----');
   const [showOtpVerified, setShowOtpVerified] = useState(false);
   const [jobProgress, setJobProgress] = useState(0);
+  const [formattedDate, setFormattedDate] = useState<string>("");
+
+  useEffect(() => {
+    setFormattedDate(new Date().toLocaleDateString());
+  }, []);
 
   useEffect(() => {
     if (!token || !bookingId || bookingId === 'demo-booking-101') {
@@ -73,139 +89,65 @@ export default function TrackBooking() {
   // Invoice simulation
   const [invoiceOpen, setInvoiceOpen] = useState(false);
 
-  // Canvas map simulator variables
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const [techPos, setTechPos] = useState({ x: 50, y: 150 });
-  const destPos = { x: 320, y: 80 }; // Customer location
+  // Technician tracking simulation variables
+  const { theme } = useTheme();
+  const startCoords: [number, number] = [17.4600, 78.3600];
+  const destCoords: [number, number] = [17.4485, 78.3741];
 
-  // WebSocket / coordinate update simulations
+  const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
+  const [techIndex, setTechIndex] = useState(0);
+
+  // Generate simulated route with multiple street intersection turns
+  const generateSimulatedRoute = (start: [number, number], dest: [number, number]): Array<[number, number]> => {
+    const turn1: [number, number] = [start[0] - 0.003, start[1] + 0.005];
+    const turn2: [number, number] = [start[0] - 0.007, start[1] + 0.008];
+    const turn3: [number, number] = [dest[0] + 0.003, dest[1] - 0.002];
+    
+    const route: Array<[number, number]> = [];
+    const interpolate = (p1: [number, number], p2: [number, number], steps: number) => {
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        route.push([p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])]);
+      }
+    };
+    
+    interpolate(start, turn1, 15);
+    interpolate(turn1, turn2, 15);
+    interpolate(turn2, turn3, 15);
+    interpolate(turn3, dest, 15);
+    route.push(dest);
+    return route;
+  };
+
   useEffect(() => {
-    let startX = 50;
-    let startY = 150;
-    let progress = 0;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const animateMap = () => {
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw stylized cyberpunk grid background
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      const gridSize = 30;
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
-
-      // Draw roads (thick blue lines)
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 20;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
-      // Road path coordinates
-      ctx.beginPath();
-      ctx.moveTo(50, 150);
-      ctx.lineTo(150, 150);
-      ctx.lineTo(150, 80);
-      ctx.lineTo(320, 80);
-      ctx.stroke();
-
-      // Draw road inner glowing lane
-      ctx.strokeStyle = '#1e1b4b';
-      ctx.lineWidth = 16;
-      ctx.stroke();
-
-      // Draw destination house node
-      ctx.shadowColor = '#6366f1';
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = '#6366f1';
-      ctx.beginPath();
-      ctx.arc(destPos.x, destPos.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Destination Label
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.fillText("YOUR HOME", destPos.x - 24, destPos.y - 14);
-
-      // Animate technician positioning
-      progress += 0.0015; // Slow travel increment
-      if (progress > 1) {
-        progress = 1;
-        setCurrentStatus('ARRIVED');
-        setEta(0);
-      }
-
-      // Compute interpolation along the road coordinates
-      let currentX = startX;
-      let currentY = startY;
-
-      if (progress < 0.4) {
-        // Segment 1: (50, 150) -> (150, 150)
-        const t = progress / 0.4;
-        currentX = startX + t * (150 - 50);
-        currentY = 150;
-      } else if (progress < 0.7) {
-        // Segment 2: (150, 150) -> (150, 80)
-        const t = (progress - 0.4) / 0.3;
-        currentX = 150;
-        currentY = 150 + t * (80 - 150);
-      } else {
-        // Segment 3: (150, 80) -> (320, 80)
-        const t = (progress - 0.7) / 0.3;
-        currentX = 150 + t * (320 - 150);
-        currentY = 80;
-      }
-
-      setTechPos({ x: currentX, y: currentY });
-
-      // Calculate matching remaining minutes
-      const remainingEta = Math.max(0, Math.round((1 - progress) * 8));
-      if (remainingEta !== eta && remainingEta >= 0) {
-        setEta(remainingEta);
-      }
-
-      // Draw moving tech vehicle node
-      ctx.shadowColor = '#06b6d4';
-      ctx.shadowBlur = 12;
-      ctx.fillStyle = '#06b6d4';
-      ctx.beginPath();
-      ctx.arc(currentX, currentY, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Tech Label
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#22d3ee';
-      ctx.font = 'bold 8px sans-serif';
-      ctx.fillText("TECH: RAMESH", currentX - 28, currentY - 12);
-
-      animationRef.current = requestAnimationFrame(animateMap);
-    };
-
-    animationRef.current = requestAnimationFrame(animateMap);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
+    const pts = generateSimulatedRoute(startCoords, destCoords);
+    setRoutePoints(pts);
   }, []);
+
+  useEffect(() => {
+    if (routePoints.length === 0) return;
+    const interval = setInterval(() => {
+      setTechIndex((prev) => {
+        const next = prev + 1;
+        if (next >= routePoints.length - 1) {
+          setCurrentStatus('ARRIVED');
+          setEta(0);
+          clearInterval(interval);
+          return routePoints.length - 1;
+        }
+
+        const remainingPct = (routePoints.length - 1 - next) / (routePoints.length - 1);
+        const nextEta = Math.max(1, Math.round(remainingPct * 8));
+        setEta(nextEta);
+
+        return next;
+      });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [routePoints]);
+
+  const activeTechCoords = routePoints[techIndex] || startCoords;
 
   // Job progress simulator (when status is IN_PROGRESS)
   useEffect(() => {
@@ -314,21 +256,22 @@ export default function TrackBooking() {
             <div className="flex justify-between items-center pb-3 border-b border-slate-900 mb-4">
               <div className="flex items-center gap-2">
                 <MapPin size={18} className="text-cyan-400" />
-                <span className="font-bold text-sm">Live Location Tracking Canvas</span>
+                <span className="font-bold text-sm">Live Location Tracking Map</span>
               </div>
-              <span className="text-[10px] text-slate-500 font-mono">WebSocket Coords (Active)</span>
+              <span className="text-[10px] text-slate-500 font-mono">Real-Time Routing Map (Active)</span>
             </div>
 
-            <div className="rounded-xl border border-slate-900 bg-black/40 overflow-hidden relative">
-              <canvas 
-                ref={canvasRef} 
-                width={380} 
-                height={220} 
-                className="w-full h-[220px] block"
+            <div className="rounded-xl border border-slate-900 bg-black/40 overflow-hidden relative w-full h-[320px]">
+              <MapComponent
+                center={destCoords}
+                customerMarker={destCoords}
+                techMarker={activeTechCoords}
+                routeCoordinates={routePoints}
+                theme={theme}
               />
-              <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 flex flex-col">
-                <span>Latitude: {techPos.x.toFixed(4)}</span>
-                <span>Longitude: {techPos.y.toFixed(4)}</span>
+              <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 flex flex-col z-[400]">
+                <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
+                <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
               </div>
             </div>
 
@@ -556,7 +499,7 @@ export default function TrackBooking() {
                   </div>
                   <div className="text-right">
                     <span className="font-bold text-slate-300">Invoice: HS-2026-9942</span>
-                    <span className="text-slate-500 mt-1 block">Date: {new Date().toLocaleDateString()}</span>
+                    <span className="text-slate-500 mt-1 block">Date: {formattedDate || "..."}</span>
                   </div>
                 </div>
 

@@ -287,7 +287,7 @@ function AdminDashboardContent() {
                   { name: "Total Users", value: liveCounters.totalUsers, color: "text-indigo-400" },
                   { name: "Verified Pros", value: liveCounters.activeProfessionals, color: "text-emerald-400" },
                   { name: "Pending Approvals", value: liveCounters.pendingApprovals, color: "text-red-400" },
-                  { name: "Monthly Revenue", value: `₹${(liveCounters.monthlyRevenue || 0).toLocaleString()}`, color: "text-cyan-400" },
+                  { name: "Monthly Revenue", value: `₹${(liveCounters.monthlyRevenue || 0).toLocaleString("en-IN")}`, color: "text-cyan-400" },
                   { name: "Active Services", value: liveCounters.activeServices || 0, color: "text-yellow-400" },
                   { name: "Reviews Tracked", value: liveCounters.reviews || 0, color: "text-orange-400" },
                   { name: "Spam Fraud Alerts", value: liveCounters.fraudDetection || 0, color: "text-rose-400" },

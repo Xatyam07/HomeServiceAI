@@ -12,7 +12,19 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
+import { api } from '@/lib/api';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useTheme } from '@/app/theme-provider';
+import dynamic from 'next/dynamic';
+
+const MapComponent = dynamic(() => import('@/components/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-slate-900/40 border border-white/5 rounded-2xl animate-pulse">
+      <span className="text-xs text-slate-550 font-bold uppercase tracking-wider">Loading Map...</span>
+    </div>
+  ),
+});
 
 // Mock Provider database for matching
 const MOCK_PROVIDERS: Record<string, any[]> = {
@@ -176,6 +188,43 @@ function DashboardContent() {
   const [address, setAddress] = useState('Flat 405, Block B, Rainbow Residency, Hitec City, Hyderabad');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [isPaying, setIsPaying] = useState(false);
+
+  const { theme } = useTheme();
+  const [custCoords, setCustCoords] = useState<[number, number]>([17.4485, 78.3741]);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geoResults, setGeoResults] = useState<any[]>([]);
+
+  const handleAddressSearch = async (query: string) => {
+    if (!query) return;
+    setGeocoding(true);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+      if (response.ok) {
+        const data = await response.json();
+        setGeoResults(data);
+      }
+    } catch (err) {
+      console.error("Geocoding failed:", err);
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const handleSelectAddress = (item: any) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    setCustCoords([lat, lon]);
+    setAddress(item.display_name);
+    setGeoResults([]);
+  };
+
+  const getProCoords = (pro: any, index: number): [number, number] => {
+    const dist = parseFloat(pro.distance) || 2.5;
+    const angle = (index * 45 * Math.PI) / 180;
+    const latOffset = (dist * Math.sin(angle)) / 111;
+    const lngOffset = (dist * Math.cos(angle)) / (111 * Math.cos(custCoords[0] * Math.PI / 180));
+    return [custCoords[0] + latOffset, custCoords[1] + lngOffset];
+  };
 
   // Chatbot states
   const [chatOpen, setChatOpen] = useState(false);
@@ -395,40 +444,64 @@ function DashboardContent() {
   };
 
   // Bot handler
-  const handleChatSend = (customText?: string) => {
+  const handleChatSend = async (customText?: string) => {
     const textToSend = customText || chatInput;
     if (!textToSend.trim()) return;
+
+    // Map conversation history to API payload format
+    const history = chatMessages.map((m) => ({
+      role: m.sender === 'ai' ? 'model' : 'user',
+      content: m.text
+    }));
+    history.push({ role: 'user', content: textToSend });
 
     setChatMessages(prev => [...prev, { sender: 'user', text: textToSend }]);
     if (!customText) setChatInput('');
     setIsChatTyping(true);
 
-    setTimeout(() => {
-      let response = "I'm analyzing that query in our context index. Could you clarify if this is an Electrical, Plumbing, or AC Repair issue?";
-      const lower = textToSend.toLowerCase();
+    try {
+      const data = await api.post('/api/ai/diagnose/chat', { messages: history });
+      const response = data.response;
 
-      if (lower.includes("ac") || lower.includes("cool")) {
-        response = "### ❄️ AC Fault Detected\n\nI recommend booking our **AC Repair** service category. \n- **Estimated base labor rate**: ₹300 - ₹500/hr\n- **Pre-diagnosed urgency**: NORMAL\n\nI have set your active service wizard to **AC Repair**. Let me know if you would like to proceed with matching.";
+      // Extract recommended service to dynamically trigger categories configuration
+      const lowerRes = response.toLowerCase();
+      if (lowerRes.includes("ac repair")) {
         setSelectedService("AC Repair");
-        setProblemDescription(textToSend);
-      } else if (lower.includes("sink") || lower.includes("leak") || lower.includes("pipe") || lower.includes("plumb")) {
-        response = "### 🚰 Plumbing Leak/Anomaly detected\n\nI have set your active service category to **Plumber**. \n- **Average travel ETA**: 12 mins\n- **Suggested actions**: Shut off the main water valve if water is accumulating under cabinets.\n\nLet me know if you want me to match you with top plumbing providers.";
+      } else if (lowerRes.includes("plumber")) {
         setSelectedService("Plumber");
-        setProblemDescription(textToSend);
-      } else if (lower.includes("spark") || lower.includes("switch") || lower.includes("shock") || lower.includes("wire")) {
-        response = "### ⚡ ALERT: Electrical Spark Hazard\n\n**CRITICAL ACTION**: Switch off the main circuit breaker if sparks are recurring.\n- **Urgency status**: SOS EMERGENCY\n- **Service Category**: Electrician (Assigned)\n- **SOS Fee**: +₹150\n\nWould you like me to match you to the closest verified Electrician immediately?";
+      } else if (lowerRes.includes("electrician")) {
         setSelectedService("Electrician");
-        setIsEmergency(true);
-        setProblemDescription(textToSend);
-      } else if (lower.includes("rate") || lower.includes("pricing") || lower.includes("cost")) {
-        response = "### 💳 Pricing & Estimates\n\nOur base hourly charges vary by category:\n- **Electrician**: ₹250/hr\n- **Plumber**: ₹250/hr\n- **AC Repair**: ₹350/hr\n\n*Emergency SOS requests incur a standard fee of ₹150 for prioritised dispatch.*";
-      } else if (lower.includes("hello") || lower.includes("hi")) {
-        response = "Hello! I am your HomeSphere AI Assistant. You can describe your problem (e.g., 'AC not cooling' or 'leaking tap') and I will set up the booking wizard and diagnostic report for you.";
+      } else if (lowerRes.includes("pest control")) {
+        setSelectedService("Pest Control");
+      } else if (lowerRes.includes("painting") || lowerRes.includes("painter")) {
+        setSelectedService("Painting");
       }
 
       setChatMessages(prev => [...prev, { sender: 'ai', text: response }]);
+    } catch (err) {
+      console.error("Chatbot API failed:", err);
+      // Fallback rule-based matching
+      let response = "I'm analyzing that query. Could you clarify if this is an Electrical, Plumbing, or AC Repair issue?";
+      const lower = textToSend.toLowerCase();
+
+      if (lower.includes("ac") || lower.includes("cool")) {
+        response = "### ❄️ AC Fault Detected\n\nI recommend booking our **AC Repair** service category. \n- **Estimated base labor rate**: ₹300 - ₹500/hr\n\nI have configured your wizard to **AC Repair**. Let me know if you would like to proceed.";
+        setSelectedService("AC Repair");
+        setProblemDescription(textToSend);
+      } else if (lower.includes("sink") || lower.includes("leak") || lower.includes("pipe") || lower.includes("plumb")) {
+        response = "### 🚰 Plumbing Leak/Anomaly detected\n\nI have set your active service category to **Plumber**. \n- **Average travel ETA**: 12 mins\n\nLet me know if you want me to match you with top plumbing providers.";
+        setSelectedService("Plumber");
+        setProblemDescription(textToSend);
+      } else if (lower.includes("spark") || lower.includes("switch") || lower.includes("shock") || lower.includes("wire")) {
+        response = "### ⚡ ALERT: Electrical Spark Hazard\n\n**CRITICAL ACTION**: Switch off the main breaker.\n- **Urgency**: SOS EMERGENCY\n- **Service Category**: Electrician (Assigned)\n\nWould you like me to match you to the closest verified Electrician immediately?";
+        setSelectedService("Electrician");
+        setIsEmergency(true);
+        setProblemDescription(textToSend);
+      }
+      setChatMessages(prev => [...prev, { sender: 'ai', text: response }]);
+    } finally {
       setIsChatTyping(false);
-    }, 1200);
+    }
   };
 
   const handleSimulateVoice = () => {
@@ -722,71 +795,95 @@ function DashboardContent() {
 
                 {/* STEP 2: AI DIAGNOSTICS & RANK MATCH */}
                 {activeStep === 2 && aiReport && (
-                  <div className="flex flex-col gap-5 text-xs text-left">
-                    <div className="p-4 rounded-xl bg-indigo-950/25 border border-indigo-900/40 leading-relaxed text-slate-300">
-                      <h4 className="font-extrabold text-sm text-indigo-400 flex items-center gap-1.5 uppercase mb-2">
-                        <Sparkles size={14} className="animate-pulse" />
-                        <span>AI Diagnostic Report Summary</span>
-                      </h4>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Identified Fault:</span> <span className="font-bold text-slate-200">{aiReport.issue}</span></div>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Complexity Index:</span> <span className="font-bold text-slate-200">{aiReport.complexity}</span></div>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Suggested Priority:</span> <span className="font-bold text-red-400">{aiReport.urgency}</span></div>
-                      <div className="flex justify-between py-1 border-t border-slate-900 mt-2 pt-2"><span className="text-slate-500">Estimated Duration:</span> <span className="font-bold text-slate-200">{aiReport.duration}</span></div>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Labor Estimate:</span> <span className="font-bold text-emerald-400">{aiReport.laborCost}</span></div>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Material Cost Forecast:</span> <span className="font-bold text-slate-200">{aiReport.materialCost}</span></div>
-                      <div className="flex justify-between py-1"><span className="text-slate-500">Service Taxes:</span> <span className="font-bold text-slate-400">{aiReport.gst}</span></div>
-                    </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs text-left items-start">
+                    {/* Left Column: Diagnostics Report & Recommendations List */}
+                    <div className="lg:col-span-6 flex flex-col gap-5">
+                      <div className="p-4 rounded-xl bg-indigo-950/25 border border-indigo-900/40 leading-relaxed text-slate-300">
+                        <h4 className="font-extrabold text-sm text-indigo-400 flex items-center gap-1.5 uppercase mb-2">
+                          <Sparkles size={14} className="animate-pulse" />
+                          <span>AI Diagnostic Report Summary</span>
+                        </h4>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Identified Fault:</span> <span className="font-bold text-slate-200">{aiReport.issue}</span></div>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Complexity Index:</span> <span className="font-bold text-slate-200">{aiReport.complexity}</span></div>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Suggested Priority:</span> <span className="font-bold text-red-400">{aiReport.urgency}</span></div>
+                        <div className="flex justify-between py-1 border-t border-slate-900 mt-2 pt-2"><span className="text-slate-500">Estimated Duration:</span> <span className="font-bold text-slate-200">{aiReport.duration}</span></div>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Labor Estimate:</span> <span className="font-bold text-emerald-400">{aiReport.laborCost}</span></div>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Material Cost Forecast:</span> <span className="font-bold text-slate-200">{aiReport.materialCost}</span></div>
+                        <div className="flex justify-between py-1"><span className="text-slate-500">Service Taxes:</span> <span className="font-bold text-slate-400">{aiReport.gst}</span></div>
+                      </div>
 
-                    <div className="flex flex-col gap-3">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Scored Professional Recommendations</label>
-                      <div className="flex flex-col gap-2.5">
-                        {matchingPros.length === 0 ? (
-                          <span className="text-slate-500 py-4 text-center">No providers located matching your filters.</span>
-                        ) : (
-                          matchingPros.map((pro, idx) => (
-                            <div 
-                              key={pro.id || idx}
-                              onClick={() => setSelectedPro(pro)}
-                              className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition-all ${
-                                selectedPro?.name === pro.name 
-                                  ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md' 
-                                  : 'bg-black/20 border-slate-900 hover:border-slate-800'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-slate-850 flex items-center justify-center font-bold text-xs">
-                                  {pro.name.split(' ').map((n: string) => n[0]).join('')}
+                      <div className="flex flex-col gap-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Scored Professional Recommendations</label>
+                        <div className="flex flex-col gap-2.5 max-h-[300px] overflow-y-auto pr-1">
+                          {matchingPros.length === 0 ? (
+                            <span className="text-slate-500 py-4 text-center">No providers located matching your filters.</span>
+                          ) : (
+                            matchingPros.map((pro, idx) => (
+                              <div 
+                                key={pro.id || idx}
+                                onClick={() => setSelectedPro(pro)}
+                                className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition-all ${
+                                  selectedPro?.name === pro.name 
+                                    ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md' 
+                                    : 'bg-black/20 border-slate-900 hover:border-slate-800'
+                                  }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-full bg-slate-850 flex items-center justify-center font-bold text-xs">
+                                    {pro.name.split(' ').map((n: string) => n[0]).join('')}
+                                  </div>
+                                  <div className="flex flex-col gap-0.5 text-left">
+                                    <span className="font-bold text-slate-200 text-sm">{pro.name}</span>
+                                    <span className="text-[10px] text-slate-500">{pro.exp} yrs experience • {pro.distance} km away</span>
+                                    <span className="text-[10px] text-emerald-400">Rate: ₹{pro.rate}/hr</span>
+                                  </div>
                                 </div>
-                                <div className="flex flex-col gap-0.5 text-left">
-                                  <span className="font-bold text-slate-200 text-sm">{pro.name}</span>
-                                  <span className="text-[10px] text-slate-500">{pro.exp} yrs experience • {pro.distance} km away</span>
-                                  <span className="text-[10px] text-emerald-400">Rate: ₹{pro.rate}/hr</span>
+                                <div className="text-right flex flex-col gap-1">
+                                  <span className="text-indigo-400 font-extrabold text-sm font-mono">{pro.matchScore}% Match Score</span>
+                                  <span className="text-[9px] text-slate-500">ETA: {pro.eta} mins travel</span>
                                 </div>
                               </div>
-                              <div className="text-right flex flex-col gap-1">
-                                <span className="text-indigo-400 font-extrabold text-sm font-mono">{pro.matchScore}% Match Score</span>
-                                <span className="text-[9px] text-slate-500">ETA: {pro.eta} mins travel</span>
-                              </div>
-                            </div>
-                          ))
-                        )}
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-2">
+                        <button
+                          onClick={() => setActiveStep(1)}
+                          className="flex-1 py-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-semibold rounded-xl text-xs transition-colors"
+                        >
+                          Configure Filters
+                        </button>
+                        <button
+                          onClick={() => setActiveStep(3)}
+                          disabled={!selectedPro}
+                          className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition-colors disabled:opacity-50"
+                        >
+                          Confirm Match & Proceed
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex gap-4 pt-2">
-                      <button
-                        onClick={() => setActiveStep(1)}
-                        className="flex-1 py-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-semibold rounded-xl text-xs transition-colors"
-                      >
-                        Configure Filters
-                      </button>
-                      <button
-                        onClick={() => setActiveStep(3)}
-                        disabled={!selectedPro}
-                        className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition-colors disabled:opacity-50"
-                      >
-                        Confirm Match & Proceed
-                      </button>
+                    {/* Right Column: Leaflet Map Panel */}
+                    <div className="lg:col-span-6 w-full h-[400px] lg:h-[500px]">
+                      <MapComponent
+                        center={custCoords}
+                        customerMarker={custCoords}
+                        providerMarkers={matchingPros.map((pro, index) => {
+                          const coords = getProCoords(pro, index);
+                          return {
+                            id: pro.id || `${index}`,
+                            lat: coords[0],
+                            lng: coords[1],
+                            name: pro.name,
+                            category: selectedService,
+                            rate: pro.rate || 350,
+                            rating: pro.rating || 4.8
+                          };
+                        })}
+                        theme={theme}
+                      />
                     </div>
                   </div>
                 )}
@@ -814,14 +911,44 @@ function DashboardContent() {
                     </div>
 
                     <div className="flex flex-col gap-3.5">
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 relative">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirm Address</label>
-                        <input
-                          type="text"
-                          value={address}
-                          onChange={(e) => setAddress(e.target.value)}
-                          className="w-full p-3 rounded-xl border border-slate-900 bg-black/20 text-slate-200 focus:outline-none focus:border-indigo-500"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            className="flex-1 p-3 rounded-xl border border-slate-900 bg-black/20 text-slate-200 focus:outline-none focus:border-indigo-500"
+                            placeholder="Type address..."
+                          />
+                          <button
+                            onClick={() => handleAddressSearch(address)}
+                            disabled={geocoding}
+                            className="px-4 bg-indigo-655 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                          >
+                            {geocoding ? (
+                              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Search size={14} />
+                            )}
+                            <span>Search</span>
+                          </button>
+                        </div>
+                        
+                        {/* Nominatim Suggestions dropdown */}
+                        {geoResults.length > 0 && (
+                          <div className="absolute top-[76px] left-0 right-0 z-45 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 flex flex-col max-h-[200px] overflow-y-auto">
+                            {geoResults.map((item, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleSelectAddress(item)}
+                                className="w-full text-left p-2.5 hover:bg-slate-850 rounded-lg text-[10px] text-slate-350 leading-relaxed transition-colors border-b border-slate-950 last:border-b-0"
+                              >
+                                {item.display_name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col gap-2">
