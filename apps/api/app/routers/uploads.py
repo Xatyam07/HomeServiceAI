@@ -1,53 +1,87 @@
 import os
 import uuid
 import shutil
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, UploadFile, File, HTTPException
 import cloudinary
 import cloudinary.uploader
+
 from app.config import settings
 
 router = APIRouter()
 
-# Local upload directory setup
-UPLOAD_DIR = "/code/static/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# -----------------------------
+# Temporary writable directory
+# -----------------------------
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "homesphere_uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @router.post("/")
 async def upload_file(file: UploadFile = File(...)):
-    # 1. Try Cloudinary if configured
-    if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET:
+    """
+    Upload file to Cloudinary if configured.
+    Otherwise temporarily store it locally.
+    """
+
+    # =============================
+    # Cloudinary Upload (Preferred)
+    # =============================
+    if (
+        settings.CLOUDINARY_CLOUD_NAME
+        and settings.CLOUDINARY_API_KEY
+        and settings.CLOUDINARY_API_SECRET
+    ):
+
         try:
             cloudinary.config(
                 cloud_name=settings.CLOUDINARY_CLOUD_NAME,
                 api_key=settings.CLOUDINARY_API_KEY,
-                api_secret=settings.CLOUDINARY_API_SECRET
+                api_secret=settings.CLOUDINARY_API_SECRET,
+                secure=True,
             )
-            # Upload using cloudinary.uploader
-            upload_result = cloudinary.uploader.upload(
+
+            result = cloudinary.uploader.upload(
                 file.file,
                 resource_type="auto",
-                folder="homesphere_docs"
+                folder="homesphere_uploads",
             )
-            return {"url": upload_result.get("secure_url")}
+
+            return {
+                "success": True,
+                "storage": "cloudinary",
+                "url": result["secure_url"],
+                "public_id": result["public_id"],
+            }
+
         except Exception as e:
-            print(f"Cloudinary upload failed: {e}. Falling back to local storage.")
-            
-    # 2. Local Storage Fallback
+            print(f"Cloudinary upload failed: {e}")
+            file.file.seek(0)
+
+    # =============================
+    # Local Temporary Storage
+    # =============================
     try:
-        # Generate a unique name
-        file_ext = os.path.splitext(file.filename)[1]
-        unique_filename = f"{uuid.uuid4()}{file_ext}"
-        dest_path = os.path.join(UPLOAD_DIR, unique_filename)
-        
-        # Save file contents
-        with open(dest_path, "wb") as buffer:
+
+        extension = os.path.splitext(file.filename)[1]
+        filename = f"{uuid.uuid4()}{extension}"
+
+        destination = UPLOAD_DIR / filename
+
+        with open(destination, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        # Return URL pointing to mounted static directory
-        url = f"http://localhost:8000/static/uploads/{unique_filename}"
-        return {"url": url}
+
+        return {
+            "success": True,
+            "storage": "local-temp",
+            "filename": filename,
+            "path": str(destination),
+        }
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to upload file in local storage: {str(e)}"
+            detail=f"Upload failed: {str(e)}",
         )
