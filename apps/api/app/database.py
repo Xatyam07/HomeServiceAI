@@ -3,33 +3,40 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
 import os
 
-db_url = settings.DATABASE_URL or "sqlite:///./homesphere.db"
+import time
+from sqlalchemy.exc import OperationalError
 
-connect_args = {}
-if db_url.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
+db_url = settings.DATABASE_URL
 
-# Test database connection and handle fallback
-try:
-    engine = create_engine(
-        db_url,
-        echo=False,
-        pool_pre_ping=True,
-        connect_args=connect_args
-    )
-    # Quick connectivity test
-    with engine.connect() as conn:
-        print(f"Database connection successful: {db_url}")
-except Exception as e:
-    print(f"Warning: Primary database connection failed ({str(e)}). Falling back to SQLite local database.")
-    db_url = "sqlite:///./homesphere.db"
-    connect_args = {"check_same_thread": False}
-    engine = create_engine(
-        db_url,
-        echo=False,
-        pool_pre_ping=True,
-        connect_args=connect_args
-    )
+if not db_url or not (db_url.startswith("postgresql://") or db_url.startswith("postgres://")):
+    raise ValueError("DATABASE_URL environment variable must be set to a valid PostgreSQL connection string starting with postgresql:// or postgres://")
+
+# Standardize postgres:// to postgresql:// for SQLAlchemy 1.4+ compatibility
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# Retry database connections on startup
+max_retries = 5
+retry_interval = 2 # seconds
+engine = None
+
+for attempt in range(1, max_retries + 1):
+    try:
+        engine = create_engine(
+            db_url,
+            echo=False,
+            pool_pre_ping=True
+        )
+        # Test the connection immediately
+        with engine.connect() as conn:
+            print(f"Database connection successful on attempt {attempt}: {db_url}")
+            break
+    except Exception as e:
+        print(f"Database connection attempt {attempt} failed: {str(e)}")
+        if attempt == max_retries:
+            print("Max retries reached. Database connection failed. Aborting startup.")
+            raise e
+        time.sleep(retry_interval)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

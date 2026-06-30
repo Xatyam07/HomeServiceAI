@@ -15,6 +15,15 @@ class UserCreate(BaseModel):
     role: str = "CUSTOMER" # CUSTOMER, PROVIDER, ADMIN
     category: Optional[str] = None # For providers
     experience_yrs: Optional[int] = 0 # For providers
+    hourly_rate: Optional[float] = 150.0
+    skills: Optional[str] = None
+    bio: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    aadhaar_url: Optional[str] = None
+    pan_url: Optional[str] = None
+    selfie_url: Optional[str] = None
+    certificate_url: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: UUID

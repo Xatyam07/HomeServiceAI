@@ -4,8 +4,9 @@ from app.database import get_db
 from app.schemas import UserVerifyToken, UserCreate, UserResponse, TokenResponse
 from app.models import User, ProviderProfile
 from app.firebase import firebase_service
-from app.security import create_access_token, create_refresh_token
 from datetime import datetime
+from app.dependencies import get_current_user
+from app.security import create_access_token, create_refresh_token
 
 router = APIRouter()
 
@@ -27,13 +28,13 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
             detail=f"Invalid Firebase Token: {str(e)}"
         )
 
-    # 2. Check if user already registered in PostgreSQL
-    db_user = db.query(User).filter(User.firebase_uid == uid).first()
+    # 2. Check if user already registered in PostgreSQL by UID or Email
+    db_user = db.query(User).filter((User.firebase_uid == uid) | (User.email == email)).first()
     
     if not db_user:
         # Enforce role mapping rules
         if email == "9369022460sa@gmail.com":
-            role = "ADMIN"
+            role = "SUPER_ADMIN"
             account_status = "ACTIVE"
         elif email == "xatyammishra07@gmail.com":
             role = "PROVIDER"
@@ -70,8 +71,13 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
                 db.add(profile)
                 db.commit()
     else:
-        # Update login details
+        # Update login details and sync firebase_uid
         db_user.last_login = datetime.utcnow()
+        db_user.firebase_uid = uid
+        if email == "9369022460sa@gmail.com" and db_user.role != "SUPER_ADMIN":
+            db_user.role = "SUPER_ADMIN"
+        if email == "xatyammishra07@gmail.com" and db_user.role != "PROVIDER":
+            db_user.role = "PROVIDER"
         if picture:
             db_user.profile_photo = picture
         db.commit()
@@ -104,7 +110,7 @@ def register_user_profile(dto: UserCreate, db: Session = Depends(get_db)):
     if not db_user:
         # Enforce email based role seeding
         if dto.email == "9369022460sa@gmail.com":
-            role = "ADMIN"
+            role = "SUPER_ADMIN"
             status_val = "ACTIVE"
         elif dto.email == "xatyammishra07@gmail.com":
             role = "PROVIDER"
@@ -124,6 +130,14 @@ def register_user_profile(dto: UserCreate, db: Session = Depends(get_db)):
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
+    else:
+        # Update user name & phone
+        db_user.name = dto.name or db_user.name
+        db_user.phone = dto.phone or db_user.phone
+        if dto.email == "9369022460sa@gmail.com" and db_user.role != "SUPER_ADMIN":
+            db_user.role = "SUPER_ADMIN"
+        db.commit()
+        db.refresh(db_user)
 
     if db_user.role == "PROVIDER":
         existing_profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == db_user.id).first()
@@ -132,9 +146,52 @@ def register_user_profile(dto: UserCreate, db: Session = Depends(get_db)):
                 user_id=db_user.id,
                 category=dto.category or "Plumber",
                 experience_yrs=dto.experience_yrs or 1,
+                hourly_rate=dto.hourly_rate or 150.0,
+                skills=dto.skills,
+                bio=dto.bio,
+                address=dto.address,
+                city=dto.city,
+                aadhaar_url=dto.aadhaar_url,
+                pan_url=dto.pan_url,
+                selfie_url=dto.selfie_url,
+                certificate_url=dto.certificate_url,
                 is_verified=(db_user.status == "APPROVED")
             )
             db.add(profile)
-            db.commit()
+        else:
+            # Update existing profile
+            existing_profile.category = dto.category or existing_profile.category
+            existing_profile.experience_yrs = dto.experience_yrs or existing_profile.experience_yrs
+            existing_profile.hourly_rate = dto.hourly_rate or existing_profile.hourly_rate
+            existing_profile.skills = dto.skills or existing_profile.skills
+            existing_profile.bio = dto.bio or existing_profile.bio
+            existing_profile.address = dto.address or existing_profile.address
+            existing_profile.city = dto.city or existing_profile.city
+            existing_profile.aadhaar_url = dto.aadhaar_url or existing_profile.aadhaar_url
+            existing_profile.pan_url = dto.pan_url or existing_profile.pan_url
+            existing_profile.selfie_url = dto.selfie_url or existing_profile.selfie_url
+            existing_profile.certificate_url = dto.certificate_url or existing_profile.certificate_url
+            existing_profile.is_verified = (db_user.status == "APPROVED")
+        db.commit()
 
     return db_user
+
+@router.put("/testing/switch-category")
+def switch_category(
+    category: str, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.email != "xatyammishra07@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Testing mode is only available for the default test professional account."
+        )
+    
+    profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found.")
+    
+    profile.category = category
+    db.commit()
+    return {"status": "SUCCESS", "message": f"Switched category to {category} successfully."}

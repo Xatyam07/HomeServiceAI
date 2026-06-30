@@ -1,21 +1,30 @@
 import uvicorn
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.database import engine, Base, SessionLocal
 from app.seed import seed_data
-from app.routers import auth, bookings, diagnosis, estimator, matching, reviewer, admin, payments
+from app.routers import auth, bookings, diagnosis, estimator, matching, reviewer, admin, payments, uploads
+
+# Imports for health check
+from sqlalchemy import text
+import redis
+import cloudinary
+import cloudinary.api
+import razorpay
+from app.config import settings
+from app.firebase import firebase_service
 
 # Auto-create database tables on launch (SQLite/Postgres)
+# Propagate exceptions so that startup fails cleanly if DB setup fails (no silent fallbacks)
+Base.metadata.create_all(bind=engine)
+print("Database tables initialized successfully.")
+db = SessionLocal()
 try:
-    Base.metadata.create_all(bind=engine)
-    print("Database tables initialized successfully.")
-    db = SessionLocal()
-    try:
-        seed_data(db)
-    finally:
-        db.close()
-except Exception as e:
-    print(f"Database table initialization/seeding failed: {str(e)}")
+    seed_data(db)
+finally:
+    db.close()
 
 app = FastAPI(
     title="HomeSphere AI - API Gateway & Core Services",
@@ -37,6 +46,11 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(bookings.router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin Suite"])
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
+app.include_router(uploads.router, prefix="/api/uploads", tags=["Uploads"])
+
+# Mount static folder
+os.makedirs("/code/static/uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="/code/static"), name="static")
 
 # AI Routers
 app.include_router(diagnosis.router, prefix="/api/ai/diagnose", tags=["AI Diagnosis"])
@@ -47,6 +61,89 @@ app.include_router(reviewer.router, prefix="/api/ai/review", tags=["AI Reviewer"
 @app.get("/")
 def read_root():
     return {"status": "online", "service": "HomeSphere AI Unified Backend Services"}
+
+@app.get("/health")
+def health_check(response: Response):
+    # 1. Check PostgreSQL connection
+    postgres_status = {"connected": False, "details": None}
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        postgres_status["connected"] = True
+        postgres_status["details"] = "Connection successful"
+    except Exception as e:
+        postgres_status["details"] = str(e)
+    finally:
+        db.close()
+
+    # 2. Check Redis connection
+    redis_status = {"connected": False, "details": None}
+    try:
+        r = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=2.0)
+        r.ping()
+        redis_status["connected"] = True
+        redis_status["details"] = "Connection successful"
+    except Exception as e:
+        redis_status["details"] = str(e)
+
+    # 3. Check Firebase connection
+    firebase_status = {"connected": False, "details": None}
+    if firebase_service.initialized:
+        firebase_status["connected"] = True
+        firebase_status["details"] = "Initialized successfully"
+    else:
+        firebase_status["details"] = "Warning: credentials missing or invalid"
+
+    # 4. Check Cloudinary connection
+    cloudinary_status = {"connected": False, "details": None}
+    if not settings.CLOUDINARY_CLOUD_NAME or not settings.CLOUDINARY_API_KEY or not settings.CLOUDINARY_API_SECRET:
+        cloudinary_status["details"] = "Warning: credentials missing"
+    else:
+        try:
+            cloudinary.config(
+                cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+                api_key=settings.CLOUDINARY_API_KEY,
+                api_secret=settings.CLOUDINARY_API_SECRET
+            )
+            res = cloudinary.api.ping()
+            if res.get("status") == "ok":
+                cloudinary_status["connected"] = True
+                cloudinary_status["details"] = "Connection successful"
+            else:
+                cloudinary_status["details"] = f"Unexpected response: {res}"
+        except Exception as e:
+            cloudinary_status["details"] = str(e)
+
+    # 5. Check Razorpay connection
+    razorpay_status = {"connected": False, "details": None}
+    if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+        razorpay_status["details"] = "Warning: credentials missing"
+    else:
+        try:
+            client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+            client.order.all({"count": 1})
+            razorpay_status["connected"] = True
+            razorpay_status["details"] = "Connection successful"
+        except Exception as e:
+            razorpay_status["details"] = str(e)
+
+    # Determine overall status: primary systems (PostgreSQL, Redis) must be online
+    is_healthy = postgres_status["connected"] and redis_status["connected"]
+    overall_status = "healthy" if is_healthy else "unhealthy"
+    
+    if not is_healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": overall_status,
+        "services": {
+            "postgres": postgres_status,
+            "redis": redis_status,
+            "firebase": firebase_status,
+            "cloudinary": cloudinary_status,
+            "razorpay": razorpay_status
+        }
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

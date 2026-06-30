@@ -1,6 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from typing import List
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import User, ProviderProfile
 
 router = APIRouter()
 
@@ -75,3 +78,59 @@ def smart_matching(req: MatchRequest):
     # Sort by match score descending
     ranked.sort(key=lambda x: x.match_score, reverse=True)
     return ranked
+
+@router.get("/search")
+def search_professionals(
+    category: str = Query(None),
+    city: str = Query(None),
+    min_rating: float = Query(None),
+    max_price: float = Query(None),
+    min_experience: int = Query(None),
+    availability: bool = Query(None),
+    verified_only: bool = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(User, ProviderProfile).join(
+        ProviderProfile, User.id == ProviderProfile.user_id
+    ).filter(User.role == "PROVIDER", User.status == "APPROVED")
+    
+    if category:
+        query = query.filter(ProviderProfile.category == category)
+    if city:
+        query = query.filter(ProviderProfile.city.ilike(f"%{city}%"))
+    if min_rating is not None:
+        query = query.filter(ProviderProfile.rating >= min_rating)
+    if max_price is not None:
+        query = query.filter(ProviderProfile.hourly_rate <= max_price)
+    if min_experience is not None:
+        query = query.filter(ProviderProfile.experience_yrs >= min_experience)
+    if availability is not None:
+        query = query.filter(ProviderProfile.is_available == availability)
+    if verified_only:
+        query = query.filter(ProviderProfile.is_verified == True)
+        
+    results = query.all()
+    
+    output = []
+    for user_obj, profile in results:
+        output.append({
+            "id": str(user_obj.id),
+            "name": user_obj.name,
+            "email": user_obj.email,
+            "phone": user_obj.phone,
+            "profile_photo": user_obj.profile_photo,
+            "category": profile.category,
+            "experience_yrs": profile.experience_yrs,
+            "rating": profile.rating,
+            "is_available": profile.is_available,
+            "is_verified": profile.is_verified,
+            "hourly_rate": profile.hourly_rate,
+            "success_rate": profile.success_rate,
+            "response_rate": profile.response_rate,
+            "bio": profile.bio,
+            "address": profile.address,
+            "city": profile.city,
+            "skills": profile.skills,
+            "service_radius_km": profile.service_radius_km
+        })
+    return output
