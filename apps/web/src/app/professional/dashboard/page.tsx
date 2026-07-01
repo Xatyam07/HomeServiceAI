@@ -42,6 +42,52 @@ function ProfessionalDashboardContent() {
   }, [user, router]);
   
   
+
+
+  // Testing mode states for multi-skill professional
+  const [switching, setSwitching] = useState(false);
+  const [selectedTestingCategory, setSelectedTestingCategory] = useState(user?.profile?.category || 'Plumber');
+
+  useEffect(() => {
+    if (user?.profile?.category) {
+      setSelectedTestingCategory(user.profile.category);
+    }
+  }, [user]);
+
+  const handleSwitchTestingCategory = async (cat: string) => {
+    setSwitching(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/testing/switch-category?category=${cat}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setSelectedTestingCategory(cat);
+        if (user && user.profile) {
+          user.profile.category = cat;
+        }
+        await refreshUserProfile();
+        alert(`Switched test category to ${cat}!`);
+      } else {
+        const data = await res.json();
+        alert(`Failed to switch: ${data.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error switching category in database.");
+    } finally {
+      setSwitching(false);
+    }
+  };
+  
+  // Calendar states
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'wallet' | 'settings' | 'performance'>('home');
+  const [dbJobs, setDbJobs] = useState<any[]>([]);
+
   // Simulated en-route coordinates map tracker
   const startCoords: [number, number] = [17.4600, 78.3600];
   const destCoords: [number, number] = [17.4485, 78.3741];
@@ -93,50 +139,6 @@ function ProfessionalDashboardContent() {
   }, [hasOnTheWay, routePoints]);
 
   const activeTechCoords = routePoints[techIndex] || startCoords;
-
-  // Testing mode states for multi-skill professional
-  const [switching, setSwitching] = useState(false);
-  const [selectedTestingCategory, setSelectedTestingCategory] = useState(user?.profile?.category || 'Plumber');
-
-  useEffect(() => {
-    if (user?.profile?.category) {
-      setSelectedTestingCategory(user.profile.category);
-    }
-  }, [user]);
-
-  const handleSwitchTestingCategory = async (cat: string) => {
-    setSwitching(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/testing/switch-category?category=${cat}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        setSelectedTestingCategory(cat);
-        if (user && user.profile) {
-          user.profile.category = cat;
-        }
-        await refreshUserProfile();
-        alert(`Switched test category to ${cat}!`);
-      } else {
-        const data = await res.json();
-        alert(`Failed to switch: ${data.detail}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error switching category in database.");
-    } finally {
-      setSwitching(false);
-    }
-  };
-  
-  // Calendar states
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'wallet' | 'settings' | 'performance'>('home');
-  const [dbJobs, setDbJobs] = useState<any[]>([]);
   const [otpInputs, setOtpInputs] = useState<{[key: string]: string}>({});
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
