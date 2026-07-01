@@ -208,24 +208,41 @@ def switch_category(
             detail="Testing mode is only available for the default test professional account."
         )
     
-    profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == current_user.id).first()
-    if not profile:
-        profile = ProviderProfile(
-            user_id=current_user.id,
-            category=category,
-            experience_yrs=5,
-            hourly_rate=350.0,
-            city="Hyderabad",
-            is_verified=True,
-            is_available=True,
-            rating=4.8,
-            latitude=17.4485,
-            longitude=78.3741
+    try:
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == current_user.id).first()
+        if not profile:
+            profile = ProviderProfile(
+                user_id=current_user.id,
+                category=category,
+                experience_yrs=5,
+                hourly_rate=350.0,
+                city="Hyderabad",
+                is_verified=True,
+                is_available=True,
+                rating=4.8,
+                latitude=17.4485,
+                longitude=78.3741
+            )
+            db.add(profile)
+        else:
+            profile.category = category
+        
+        current_user.status = "APPROVED"
+        db.commit()
+        return {"status": "SUCCESS", "message": f"Switched category to {category} successfully."}
+    except Exception as e:
+        import traceback
+        from fastapi.responses import JSONResponse
+        db.rollback()
+        error_msg = str(e)
+        details = traceback.format_exc()
+        print(f"ERROR: Exception occurred in /testing/switch-category: {error_msg}\n{details}")
+        
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": "Error switching category in database",
+                "details": f"{error_msg}\n{details}"
+            }
         )
-        db.add(profile)
-    else:
-        profile.category = category
-    
-    current_user.status = "APPROVED"
-    db.commit()
-    return {"status": "SUCCESS", "message": f"Switched category to {category} successfully."}

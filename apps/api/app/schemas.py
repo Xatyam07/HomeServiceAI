@@ -25,6 +25,25 @@ class UserCreate(BaseModel):
     selfie_url: Optional[str] = None
     certificate_url: Optional[str] = None
 
+class ProviderProfileResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    category: str
+    experience_yrs: int
+    rating: float
+    is_available: bool
+    is_verified: bool
+    hourly_rate: float
+    success_rate: float
+    response_rate: float
+    address: Optional[str] = None
+    city: Optional[str] = None
+    skills: Optional[str] = None
+    bio: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class UserResponse(BaseModel):
     id: UUID
     email: str
@@ -36,6 +55,7 @@ class UserResponse(BaseModel):
     profile_photo: Optional[str] = None
     last_login: Optional[datetime] = None
     created_at: datetime
+    profile: Optional[ProviderProfileResponse] = None
 
     class Config:
         from_attributes = True

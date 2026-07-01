@@ -64,20 +64,32 @@ function ProfessionalDashboardContent() {
           'Authorization': `Bearer ${token}`
         }
       });
+      
+      let data: any;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error(`Invalid response format from server (non-JSON): ${res.statusText}`);
+      }
+
       if (res.ok) {
         setSelectedTestingCategory(cat);
-        if (user && user.profile) {
+        if (user) {
+          if (!user.profile) {
+            user.profile = {};
+          }
           user.profile.category = cat;
         }
         await refreshUserProfile();
         alert(`Switched test category to ${cat}!`);
       } else {
-        const data = await res.json();
-        alert(`Failed to switch: ${data.detail}`);
+        const errMsg = data?.error || data?.detail || `Failed to switch (Status: ${res.status})`;
+        const errDetails = data?.details ? `\nDetails: ${data.details}` : '';
+        alert(`Failed to switch: ${errMsg}${errDetails}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Error switching category in database.");
+      alert(`Error switching category in database.\nMessage: ${err.message || err}`);
     } finally {
       setSwitching(false);
     }
