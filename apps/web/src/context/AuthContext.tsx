@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncWithBackend = async (fbUser: FirebaseUser, roleOption: string = "CUSTOMER") => {
     try {
       const idToken = await fbUser.getIdToken();
-      const data = await api.post('/api/auth/verify', { id_token: idToken, role: roleOption });
+      const data = await api.post('/api/auth/verify', { id_token: idToken, role: roleOption }, { timeout: 3000, retries: 0 });
 
       setToken(data.access_token);
       setUser(data.user);
@@ -61,8 +61,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Backend sync failed:", err);
       // Fallback mock session for visual check/standalone testing if backend is down
+      const convertToUUID = (str: string) => {
+        let hex = '';
+        for (let i = 0; i < str.length; i++) {
+          hex += str.charCodeAt(i).toString(16);
+        }
+        hex = hex.padEnd(32, '0').substring(0, 32);
+        return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(12, 15)}-9${hex.substring(15, 18)}-${hex.substring(18, 30)}`;
+      };
       const mockUser = {
-        id: fbUser.uid,
+        id: convertToUUID(fbUser.uid),
         email: fbUser.email || "mock@example.com",
         name: fbUser.displayName || "HomeSphere User",
         role: fbUser.email === "9369022460sa@gmail.com" 

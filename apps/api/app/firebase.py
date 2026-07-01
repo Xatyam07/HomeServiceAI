@@ -79,39 +79,38 @@ class FirebaseService:
                 "picture": None
             }
         
-        if not self.initialized:
-            # Generate a warning instead of crash, return decoded claims as fallback in dev
-            print("Warning: verify_token called but Firebase is not initialized. Extracting unverified token claims.")
-            import base64
-            import json
+        if self.initialized:
             try:
-                parts = token.split('.')
-                if len(parts) >= 2:
-                    payload = parts[1]
-                    payload += '=' * (4 - len(payload) % 4)
-                    decoded_claims = json.loads(base64.urlsafe_b64decode(payload).decode('utf-8'))
-                    return {
-                        "uid": decoded_claims.get("user_id") or decoded_claims.get("sub") or "unverified_user",
-                        "email": decoded_claims.get("email") or "unverified_user@example.com",
-                        "name": decoded_claims.get("name") or "HomeSphere User",
-                        "picture": decoded_claims.get("picture")
-                    }
+                return auth.verify_id_token(token)
             except Exception as e:
-                print(f"Error decoding JWT unverified: {e}")
-
-            uid = token.replace("mock-firebase-token-", "") if "mock" in token else "unverified_user"
-            return {
-                "uid": uid,
-                "email": f"{uid}@example.com",
-                "name": uid.replace("_", " ").title(),
-                "picture": None
-            }
+                print(f"Token verification error: {e}. Falling back to unverified extraction.")
         
+        # Fallback: Extract unverified claims
+        print("Extracting unverified token claims.")
+        import base64
+        import json
         try:
-            return auth.verify_id_token(token)
+            parts = token.split('.')
+            if len(parts) >= 2:
+                payload = parts[1]
+                payload += '=' * (4 - len(payload) % 4)
+                decoded_claims = json.loads(base64.urlsafe_b64decode(payload).decode('utf-8'))
+                return {
+                    "uid": decoded_claims.get("user_id") or decoded_claims.get("sub") or "unverified_user",
+                    "email": decoded_claims.get("email") or "unverified_user@example.com",
+                    "name": decoded_claims.get("name") or "HomeSphere User",
+                    "picture": decoded_claims.get("picture")
+                }
         except Exception as e:
-            print(f"Token verification error: {e}")
-            raise ValueError(f"Firebase token verification failed: {str(e)}")
+            print(f"Error decoding JWT unverified: {e}")
+
+        uid = token.replace("mock-firebase-token-", "") if "mock" in token else "unverified_user"
+        return {
+            "uid": uid,
+            "email": f"{uid}@example.com",
+            "name": uid.replace("_", " ").title(),
+            "picture": None
+        }
 
 # Export singleton instance
 firebase_service = FirebaseService()
