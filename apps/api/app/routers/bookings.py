@@ -150,7 +150,7 @@ def get_bookings(
         is_master_sim = user and user.email.lower() == "xatyammishra07@gmail.com"
         if is_master_sim:
             # Query IDs of all dummy professionals
-            dummy_users_ids = db.query(User.id).filter(User.email.like("%@homesphere.com")).all()
+            dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.com")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
             return db.query(Booking).filter(
                 (Booking.provider_id == userId) | 
@@ -203,13 +203,13 @@ def accept_booking(booking_id: UUID, db: Session = Depends(get_db)):
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
         
-    booking.status = "ACCEPTED"
+    booking.status = "ON_THE_WAY"
     if not booking.otp:
-        booking.otp = str(random.randint(1000, 9999))
+        booking.otp = str(random.randint(100000, 999999)) # Generate 6-digit OTP
         
     db.commit()
     db.refresh(booking)
-    return {"status": "SUCCESS", "message": "Booking request accepted.", "booking": booking}
+    return {"status": "SUCCESS", "message": "Booking request accepted. Technician en route.", "booking": booking}
 
 @router.post("/{booking_id}/reject")
 def reject_booking(booking_id: UUID, db: Session = Depends(get_db)):

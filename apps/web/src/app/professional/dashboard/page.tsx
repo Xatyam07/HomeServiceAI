@@ -214,7 +214,7 @@ function ProfessionalDashboardContent() {
   // Monitor database bookings to pop up real jobs for simulator
   useEffect(() => {
     if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
-      const openJob = dbJobs.find(job => job.status === 'REQUESTED' || job.status === 'ASSIGNED');
+      const openJob = dbJobs.find(job => job.status === 'REQUESTED' || job.status === 'ASSIGNED' || job.status === 'ACCEPTED');
       if (openJob) {
         if (!incomingJob || incomingJob.id !== openJob.id) {
           setIncomingJob({

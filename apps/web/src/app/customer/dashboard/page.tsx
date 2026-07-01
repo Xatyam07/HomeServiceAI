@@ -490,7 +490,7 @@ function DashboardContent() {
 
     const bookingPayload = {
       customerId: user?.id || "5300bfd4-1a2c-4977-9876-000000000001",
-      providerId: null,
+      providerId: selectedPro?.id || null,
       serviceType: selectedService,
       description: problemDescription,
       address: address,
