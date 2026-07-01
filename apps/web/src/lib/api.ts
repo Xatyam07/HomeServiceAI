@@ -30,7 +30,7 @@ export async function apiRequest(endpoint: string, options: RequestOptions = {})
   const url = endpoint.startsWith("http") ? endpoint : `${baseUrl.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`;
 
   const {
-    timeout = 10000, // 10 seconds default
+    timeout = 30000, // 30 seconds default
     retries = 2,    // 2 retries default
     headers = {},
     ...restOptions

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas import BookingCreate, BookingResponse, BookingStatusUpdate
@@ -216,12 +216,12 @@ async def get_bookings(
         if is_master_sim:
             dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.com")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
-            return db.query(Booking).filter(
+            return db.query(Booking).options(joinedload(Booking.review)).filter(
                 (Booking.provider_id == user_uuid) | 
                 (Booking.provider_id.in_(dummy_ids_list))
             ).order_by(Booking.created_at.desc()).all()
-        return db.query(Booking).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
-    return db.query(Booking).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
+        return db.query(Booking).options(joinedload(Booking.review)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+    return db.query(Booking).options(joinedload(Booking.review)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 
 @router.put("/{booking_id}/status", response_model=BookingResponse)
 async def update_booking_status(
@@ -273,7 +273,7 @@ async def update_booking_status(
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    booking = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
     return booking
