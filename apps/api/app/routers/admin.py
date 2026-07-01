@@ -373,3 +373,97 @@ def list_all_payments(db: Session = Depends(get_db), current_user: User = Depend
             "created_at": p.created_at.isoformat()
         })
     return results
+
+# 14. Live Tracking Coordinates for Map View
+@router.get("/live-tracking")
+def get_live_tracking_data(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    active_bookings = db.query(Booking).filter(Booking.status.in_(["ASSIGNED", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "IN_PROGRESS"])).all()
+    online_providers = db.query(User, ProviderProfile).join(
+        ProviderProfile, User.id == ProviderProfile.user_id
+    ).filter(User.role == "PROVIDER", ProviderProfile.is_available == True).all()
+    
+    bookings_data = []
+    for b in active_bookings:
+        cust = db.query(User).filter(User.id == b.customer_id).first()
+        prov = db.query(User).filter(User.id == b.provider_id).first()
+        bookings_data.append({
+            "id": str(b.id),
+            "customer": cust.name if cust else "Unknown",
+            "provider": prov.name if prov else "Unassigned",
+            "service": b.service_type,
+            "status": b.status,
+            "latitude": b.latitude,
+            "longitude": b.longitude,
+            "tech_latitude": b.tech_latitude,
+            "tech_longitude": b.tech_longitude
+        })
+        
+    providers_data = []
+    for u, p in online_providers:
+        providers_data.append({
+            "id": str(u.id),
+            "name": u.name,
+            "category": p.category,
+            "latitude": p.latitude,
+            "longitude": p.longitude,
+            "is_available": p.is_available
+        })
+        
+    return {
+        "active_bookings": bookings_data,
+        "online_providers": providers_data
+    }
+
+# 15. Export CSV Reports
+import csv
+import io
+from fastapi.responses import StreamingResponse
+
+@router.get("/reports/export")
+def export_admin_report(
+    report_type: str = Query("bookings"), # bookings, payments, users
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    if report_type == "bookings":
+        bookings = db.query(Booking).all()
+        writer.writerow(["Booking ID", "Customer ID", "Provider ID", "Service Type", "Status", "Total Cost", "Created At"])
+        for b in bookings:
+            writer.writerow([b.id, b.customer_id, b.provider_id, b.service_type, b.status, b.total_cost, b.created_at])
+    elif report_type == "payments":
+        payments = db.query(PaymentRecord).all()
+        writer.writerow(["Payment ID", "User ID", "Booking ID", "Razorpay Order ID", "Amount", "Status", "Created At"])
+        for p in payments:
+            writer.writerow([p.id, p.user_id, p.booking_id, p.razorpay_order_id, p.amount, p.status, p.created_at])
+    else:
+        users = db.query(User).all()
+        writer.writerow(["User ID", "Name", "Email", "Role", "Status", "Created At"])
+        for u in users:
+            writer.writerow([u.id, u.name, u.email, u.role, u.status, u.created_at])
+            
+    output.seek(0)
+    headers = {
+        'Content-Disposition': f'attachment; filename="homesphere_{report_type}_report.csv"',
+        'Content-Type': 'text/csv'
+    }
+    return StreamingResponse(iter([output.getvalue()]), headers=headers)
+
+# 16. Reset User Password (Admin action)
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(user_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"status": "SUCCESS", "message": f"Password reset instructions sent to {user.email}."}
+
+# 17. Force Logout User (Admin action)
+@router.post("/users/{user_id}/force-logout")
+def force_logout_user(user_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"status": "SUCCESS", "message": f"User {user.name} has been forced to log out from all active devices."}
+

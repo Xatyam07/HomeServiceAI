@@ -80,7 +80,10 @@ async def chat_interaction(payload: ChatRequest):
         "confidence": ai_response.confidence,
         "detected_issue": ai_response.detected_issue,
         "estimated_cost": ai_response.estimated_cost,
+        "estimated_time": ai_response.estimated_time,
         "urgency": ai_response.urgency,
         "recommended_service": ai_response.recommended_service,
-        "follow_up_questions": ai_response.follow_up_questions
+        "follow_up_questions": ai_response.follow_up_questions,
+        "maintenance_tips": ai_response.maintenance_tips,
+        "repair_vs_replacement": ai_response.repair_vs_replacement
     }

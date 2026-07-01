@@ -207,6 +207,25 @@ function ProfessionalDashboardContent() {
   const [walletBalance, setWalletBalance] = useState(4850);
   const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'done'>('idle');
 
+  const loadWalletBalance = async () => {
+    if (!token || !user) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/payments/wallet/balance?userId=${user.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWalletBalance(data.balance);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadWalletBalance();
+  }, [token, user, activeTab]);
+
   const triggerPayout = () => {
     setPayoutStatus('processing');
     setTimeout(() => {
@@ -475,13 +494,35 @@ function ProfessionalDashboardContent() {
                     </div>
 
                     <div className="flex flex-col items-stretch sm:items-end justify-end gap-3 min-w-[200px]">
-                      {job.status === 'REQUESTED' && (
+                      {(job.status === 'ASSIGNED' || job.status === 'REQUESTED') && (
                         <div className="flex gap-2">
                           <button
-                            onClick={() => updateJobStatus(job.id, 'ACCEPTED')}
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`http://localhost:8000/api/bookings/${job.id}/accept`, {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (res.ok) loadProfessionalJobs();
+                              } catch(e) { console.error(e); }
+                            }}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
                           >
                             Accept Job
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`http://localhost:8000/api/bookings/${job.id}/reject`, {
+                                  method: 'POST',
+                                  headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (res.ok) loadProfessionalJobs();
+                              } catch(e) { console.error(e); }
+                            }}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all"
+                          >
+                            Reject
                           </button>
                         </div>
                       )}

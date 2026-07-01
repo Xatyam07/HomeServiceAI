@@ -11,6 +11,16 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import dynamic from 'next/dynamic';
+
+const MapComponent = dynamic(() => import('@/components/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full min-h-[250px] flex items-center justify-center bg-slate-900/40 border border-white/5 rounded-2xl animate-pulse">
+      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Syncing map view...</span>
+    </div>
+  ),
+});
 
 function AdminDashboardContent() {
   const { user, token, logout } = useAuth();
@@ -23,6 +33,46 @@ function AdminDashboardContent() {
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<any | null>(null);
+
+  const [liveTracking, setLiveTracking] = useState<any>({ providers: [], bookings: [] });
+
+  const loadLiveTracking = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('http://localhost:8000/api/admin/live-tracking', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLiveTracking(data);
+      }
+    } catch (err) {
+      console.error("Error loading live tracking:", err);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('http://localhost:8000/api/admin/reports/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `marketplace_report_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        alert("Failed to export report CSV.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadAdminData = async () => {
     if (!token) return;
@@ -53,6 +103,9 @@ function AdminDashboardContent() {
 
   useEffect(() => {
     loadAdminData();
+    loadLiveTracking();
+    const interval = setInterval(loadLiveTracking, 10000);
+    return () => clearInterval(interval);
   }, [token, adminTab]);
 
   // Stats Fallback & Live State
@@ -231,6 +284,13 @@ function AdminDashboardContent() {
             <span className="text-xs bg-purple-950/60 text-purple-400 border border-purple-900/30 px-2 py-0.5 rounded-full font-mono font-bold">
               {user?.role === 'SUPER_ADMIN' ? 'Super Admin Suite' : 'Admin Suite'}
             </span>
+            <button
+              onClick={handleExportCSV}
+              className="px-2.5 py-1 rounded bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+            >
+              <FileText size={11} />
+              <span>Export CSV</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
@@ -367,6 +427,30 @@ function AdminDashboardContent() {
                       ))
                     )}
                   </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Live Telemetry Map Tracker */}
+              <div className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4 text-left">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                  <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Live Global Telemetry Map</h3>
+                  <span className="text-[10px] text-slate-500 font-mono">Dynamic coordinates tracking (Active)</span>
+                </div>
+                <div className="rounded-xl border border-slate-900 bg-black/40 overflow-hidden relative w-full h-[300px]">
+                  <MapComponent
+                    center={[20.5937, 78.9629]}
+                    providerMarkers={(liveTracking?.providers || []).map((p: any) => ({
+                      id: p.provider_id,
+                      lat: p.latitude,
+                      lng: p.longitude,
+                      name: p.name,
+                      category: p.category,
+                      rate: 350,
+                      rating: 4.8
+                    }))}
+                    customerMarker={liveTracking?.bookings?.length > 0 ? [liveTracking.bookings[0].latitude, liveTracking.bookings[0].longitude] : undefined}
+                    theme="dark"
+                  />
                 </div>
               </div>
 

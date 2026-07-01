@@ -17,6 +17,10 @@ class User(Base):
     firebase_uid = Column(String, unique=True, index=True, nullable=False)
     profile_photo = Column(String, nullable=True)
     last_login = Column(DateTime, default=datetime.utcnow, nullable=True)
+    saved_addresses = Column(String, nullable=True)  # JSON-serialized list of addresses
+    favourite_providers = Column(String, nullable=True)  # JSON-serialized list of UUIDs
+    payment_methods = Column(String, nullable=True)  # JSON-serialized list of methods
+    emergency_contacts = Column(String, nullable=True)  # JSON-serialized list of contacts
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -55,6 +59,21 @@ class ProviderProfile(Base):
     skills = Column(String, nullable=True)
     service_radius_km = Column(Float, default=15.0)
     
+    # Marketplace Expansion Fields
+    gender = Column(String, nullable=True)
+    age = Column(Integer, nullable=True)
+    languages = Column(String, nullable=True)
+    visit_charge = Column(Float, default=0.0)
+    jobs_completed = Column(Integer, default=0)
+    upi_id = Column(String, nullable=True)
+    gst = Column(String, nullable=True)
+    bank_name = Column(String, nullable=True)
+    bank_account = Column(String, nullable=True)
+    bank_ifsc = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    is_premium = Column(Boolean, default=False)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -87,6 +106,9 @@ class Booking(Base):
     eta_minutes = Column(Integer, nullable=True)
 
     payment_status = Column(String, default="PENDING") # PENDING, PAID, REFUNDED, FAILED
+    otp = Column(String, nullable=True)
+    otp_verified_at = Column(DateTime, nullable=True)
+    rejected_providers = Column(String, default="[]") # JSON list of provider IDs who rejected
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -166,6 +188,10 @@ class PaymentRecord(Base):
     amount = Column(Float, nullable=False)
     status = Column(String, default="CREATED") # CREATED, CAPTURED, REFUNDED, FAILED
     signature = Column(String, nullable=True)
+    payment_type = Column(String, default="FULL_BEFORE") # FULL_BEFORE, FULL_AFTER, PARTIAL, WALLET, TIP
+    coupon_code = Column(String, nullable=True)
+    discount_amount = Column(Float, default=0.0)
+    tip_amount = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

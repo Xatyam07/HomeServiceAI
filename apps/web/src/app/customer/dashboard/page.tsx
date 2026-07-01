@@ -53,6 +53,15 @@ const MOCK_PROVIDERS: Record<string, any[]> = {
   ]
 };
 
+const CITIES_LIST = [
+  "Kanpur", "Lucknow", "Varanasi", "Prayagraj", "Delhi", "Noida", "Ghaziabad", "Gurugram", "Faridabad",
+  "Mumbai", "Pune", "Nagpur", "Nashik", "Ahmedabad", "Surat", "Vadodara", "Jaipur", "Jodhpur", "Udaipur",
+  "Bhopal", "Indore", "Hyderabad", "Bengaluru", "Chennai", "Kolkata", "Patna", "Ranchi", "Bhubaneswar",
+  "Chandigarh", "Amritsar", "Ludhiana", "Dehradun", "Haridwar", "Meerut", "Agra", "Bareilly", "Aligarh",
+  "Mathura", "Gorakhpur", "Jhansi", "Raipur", "Visakhapatnam", "Coimbatore", "Kochi", "Mysuru", "Mangalore",
+  "Thiruvananthapuram", "Goa", "Siliguri", "Guwahati"
+];
+
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,6 +77,79 @@ function DashboardContent() {
   // Tab selections
   const [customerTab, setCustomerTab] = useState<'home' | 'bookings' | 'wallet' | 'loyalty' | 'profile' | 'support'>('home');
   const [walletBalance, setWalletBalance] = useState(1200);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponValid, setCouponValid] = useState(false);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [tipAmount, setTipAmount] = useState(0.0);
+
+  const loadWalletBalance = async () => {
+    if (!token || !user) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/payments/wallet/balance?userId=${user.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWalletBalance(data.balance);
+      }
+    } catch (err) {
+      console.error("Failed to load wallet balance:", err);
+    }
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    const totalToPay = isEmergency ? selectedPro.rate + 150 : selectedPro.rate;
+    try {
+      const res = await fetch('http://localhost:8000/api/payments/coupons/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ coupon_code: couponCode, booking_amount: totalToPay })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCouponValid(data.valid);
+        setCouponMessage(data.message);
+        if (data.valid) {
+          setDiscountAmount(data.discount);
+        } else {
+          setDiscountAmount(0);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to validate coupon:", err);
+    }
+  };
+
+  const handleWalletTopup = async () => {
+    if (!token || !user) return;
+    try {
+      const res = await fetch('http://localhost:8000/api/payments/wallet/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ user_id: user.id, amount: 1000 })
+      });
+      if (res.ok) {
+        alert("₹1,000 added successfully to wallet!");
+        loadWalletBalance();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (token && user) {
+      loadWalletBalance();
+    }
+  }, [token, user, customerTab]);
   const [loyaltyPoints, setLoyaltyPoints] = useState(350);
   const [coupons, setCoupons] = useState([
     { code: 'SPHEREAI20', desc: 'Flat 20% off on all deep cleaning services', status: 'ACTIVE' },
@@ -370,55 +452,78 @@ function DashboardContent() {
   };
 
   // Pay and trigger booking
-  const handlePayment = () => {
+  const handlePayment = async () => {
     setIsPaying(true);
 
+    const totalToPay = isEmergency ? selectedPro.rate + 150 : selectedPro.rate;
+    const finalBill = Math.max(totalToPay - discountAmount + tipAmount, 0.0);
+
     const bookingPayload = {
-      customerId: user?.id || "5300bfd4-1a2c-4977-9876-000000000001", // Fallback seeded customer UUID
+      customerId: user?.id || "5300bfd4-1a2c-4977-9876-000000000001",
       providerId: null,
       serviceType: selectedService,
       description: problemDescription,
       address: address,
       isEmergency: isEmergency,
-      laborCost: isEmergency ? selectedPro.rate + 150 : selectedPro.rate,
+      laborCost: selectedPro.rate,
       materialCost: 0.0,
-      totalCost: isEmergency ? Math.round((selectedPro.rate + 150) * 1.18) : Math.round(selectedPro.rate * 1.18),
+      totalCost: finalBill,
       durationMin: 60,
-      latitude: 17.4485,
-      longitude: 78.3741
+      latitude: custCoords[0],
+      longitude: custCoords[1]
     };
 
-    fetch('http://localhost:8000/api/bookings/', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(bookingPayload)
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Booking creation failed");
-      return res.json();
-    })
-    .then(booking => {
-      // Create Razorpay Order
-      const orderPayload = {
-        booking_id: booking.id,
-        user_id: booking.customer_id,
-        amount: booking.total_cost
-      };
-      
-      return fetch('http://localhost:8000/api/payments/order', {
+    try {
+      const res = await fetch('http://localhost:8000/api/bookings/', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(orderPayload)
-      })
-      .then(orderRes => orderRes.json())
-      .then(order => {
-        // Verify payment
+        body: JSON.stringify(bookingPayload)
+      });
+      if (!res.ok) throw new Error("Booking creation failed");
+      const booking = await res.json();
+
+      if (paymentMethod === 'Wallet') {
+        const walletPayRes = await fetch('http://localhost:8000/api/payments/wallet/pay', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            booking_id: booking.id,
+            user_id: user.id,
+            amount: finalBill
+          })
+        });
+        if (!walletPayRes.ok) {
+          const errData = await walletPayRes.json();
+          throw new Error(errData.detail || "Wallet payment failed");
+        }
+        setIsPaying(false);
+        router.push(`/customer/track/${booking.id}`);
+      } else {
+        const orderPayload = {
+          booking_id: booking.id,
+          user_id: booking.customer_id,
+          amount: finalBill,
+          payment_type: paymentMethod === 'Card' ? 'FULL_BEFORE' : 'FULL_BEFORE',
+          coupon_code: couponCode || null,
+          tip_amount: tipAmount
+        };
+        
+        const orderRes = await fetch('http://localhost:8000/api/payments/order', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(orderPayload)
+        });
+        const order = await orderRes.json();
+
         const verifyPayload = {
           booking_id: booking.id,
           razorpay_order_id: order.id,
@@ -426,7 +531,7 @@ function DashboardContent() {
           signature: "test_signature_success"
         };
         
-        return fetch('http://localhost:8000/api/payments/verify', {
+        await fetch('http://localhost:8000/api/payments/verify', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -434,19 +539,14 @@ function DashboardContent() {
           },
           body: JSON.stringify(verifyPayload)
         });
-      })
-      .then(() => {
+
         setIsPaying(false);
         router.push(`/customer/track/${booking.id}`);
-      });
-    })
-    .catch(err => {
-      console.log("Using checkout client-side fallback:", err);
-      setTimeout(() => {
-        setIsPaying(false);
-        router.push('/customer/track/demo-booking-101');
-      }, 1500);
-    });
+      }
+    } catch (err: any) {
+      alert(`Payment / Booking failed: ${err.message}`);
+      setIsPaying(false);
+    }
   };
 
   // Bot handler
@@ -691,13 +791,16 @@ function DashboardContent() {
                       <div className="grid grid-cols-2 gap-3.5">
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] text-slate-500">Service City</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Hyderabad"
+                          <select 
                             value={cityFilter}
                             onChange={(e) => setCityFilter(e.target.value)}
-                            className="p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-300 focus:outline-none"
-                          />
+                            className="p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-300 focus:outline-none cursor-pointer"
+                          >
+                            <option value="">Select City</option>
+                            {CITIES_LIST.map((city) => (
+                              <option key={city} value={city}>{city}</option>
+                            ))}
+                          </select>
                         </div>
                         
                         <div className="flex flex-col gap-1.5">
@@ -970,16 +1073,63 @@ function DashboardContent() {
                         <select
                           value={paymentMethod}
                           onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="w-full p-3 rounded-xl border border-slate-900 bg-black/25 text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                          className="w-full p-3 rounded-xl border border-slate-900 bg-black/25 text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
                         >
                           <option value="UPI">UPI Instant Pay (Razorpay Test Mode)</option>
                           <option value="Card">Visa / Mastercard (Secure Checkout)</option>
-                          <option value="Wallet">Credits Wallet (Balance: ₹{walletBalance})</option>
+                          <option value="Wallet">Credits Wallet (Balance: ₹{walletBalance.toFixed(2)})</option>
                         </select>
+                      </div>
+
+                      {/* Coupon Code Entry */}
+                      <div className="flex flex-col gap-2 mt-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Apply Coupon / Referral</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="e.g. WELCOME50, REFER50, HOMESPHERE20"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value)}
+                            className="flex-1 p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-200 uppercase focus:outline-none text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyCoupon}
+                            className="px-3 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                        {couponMessage && (
+                          <div className={`text-[10px] font-bold ${couponValid ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {couponMessage}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Add Tip */}
+                      <div className="flex flex-col gap-2 mt-1">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Add a Tip for Professional</label>
+                        <div className="flex gap-2">
+                          {[0, 20, 50, 100].map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setTipAmount(t)}
+                              className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                                tipAmount === t
+                                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                                  : 'bg-black/20 border-slate-900 text-slate-400'
+                              }`}
+                            >
+                              {t === 0 ? 'No Tip' : `₹${t}`}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="p-4 bg-indigo-950/25 border border-indigo-900/40 rounded-xl flex flex-col gap-1.5">
+                    <div className="p-4 bg-indigo-950/25 border border-indigo-900/40 rounded-xl flex flex-col gap-1.5 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Labor Charge Estimate</span>
                         <span>₹{selectedPro.rate}</span>
@@ -994,13 +1144,27 @@ function DashboardContent() {
                         <span className="text-slate-500">Service CGST + SGST (18%)</span>
                         <span>₹{isEmergency ? Math.round((selectedPro.rate + 150) * 0.18) : Math.round(selectedPro.rate * 0.18)}</span>
                       </div>
+                      {discountAmount > 0 && (
+                        <div className="flex justify-between text-emerald-400">
+                          <span>Coupon Discount Applied</span>
+                          <span>-₹{discountAmount}</span>
+                        </div>
+                      )}
+                      {tipAmount > 0 && (
+                        <div className="flex justify-between text-indigo-400">
+                          <span>Technician Tip</span>
+                          <span>+₹{tipAmount}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-sm text-slate-200">
                         <span>Total Estimated Payment</span>
                         <span className="text-indigo-400">
-                          ₹{isEmergency 
-                            ? Math.round((selectedPro.rate + 150) * 1.18) 
-                            : Math.round(selectedPro.rate * 1.18)
-                          }
+                          ₹{Math.max(
+                            (isEmergency 
+                              ? Math.round((selectedPro.rate + 150) * 1.18) 
+                              : Math.round(selectedPro.rate * 1.18)) - discountAmount + tipAmount, 
+                            0.0
+                          ).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -1130,7 +1294,7 @@ function DashboardContent() {
                   <span className="text-2xl font-bold text-white mt-1 block">₹{walletBalance}</span>
                 </div>
                 <button
-                  onClick={() => { setWalletBalance(prev => prev + 1000); alert("Credits added successfully via Razorpay Simulator!"); }}
+                  onClick={handleWalletTopup}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs transition-all"
                 >
                   Add Money
