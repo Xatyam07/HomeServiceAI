@@ -2,6 +2,7 @@ import uvicorn
 import os
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import engine, Base, SessionLocal
 from app.seed import seed_data
@@ -35,6 +36,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Core Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { 
   Zap, Wrench, Sparkles, User, MapPin, Clock, Star, 
   DollarSign, Check, X, Bell, Calendar, TrendingUp, 
-  ChevronRight, Award, MessageSquare, ShieldCheck, Download, LogOut
+  ChevronRight, ChevronLeft, Award, MessageSquare, ShieldCheck, Download, LogOut,
+  Search, SlidersHorizontal, Eye, UserX, UserCheck, MessageCircle, Loader2, ArrowUpDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
@@ -22,7 +23,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ),
 });
 
-function ProfessionalDashboardContent() {
+function ProviderDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
   const router = useRouter();
   const { user, logout, token, refreshUserProfile } = useAuth();
@@ -1207,9 +1208,1023 @@ function ProfessionalDashboardContent() {
   );
 }
 
+// ==========================================
+// ADMIN FLEET & PARTNER MANAGEMENT SYSTEM
+// ==========================================
+function AdminManagementDashboard() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
+  const { user, token, logout } = useAuth();
+  const router = useRouter();
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<'fleet' | 'live' | 'history'>('fleet');
+
+  // Locations metadata
+  const [locations, setLocations] = useState<{[key: string]: string[]}>({});
+  const [states, setStates] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+
+  // Filtering
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination
+  const [limit, setLimit] = useState(25);
+  const [offset, setOffset] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('newest');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Core Data Lists
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [activeBookings, setActiveBookings] = useState<any[]>([]);
+  const [historyBookings, setHistoryBookings] = useState<any[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [historySearch, setHistorySearch] = useState('');
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<any>(null);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [showTrackModal, setShowTrackModal] = useState(false);
+
+  // Map tracking coordinates for live tracker modal
+  const [routePoints, setRoutePoints] = useState<[number, number][]>([]);
+  const [techIndex, setTechIndex] = useState(0);
+
+  const ROLES = [
+    "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "AC Installation", 
+    "Deep Cleaning", "Pest Control", "Babysitter", "Driver"
+  ];
+
+  // Fetch location options
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_BASE}/api/admin/locations`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setLocations(data);
+        setStates(Object.keys(data));
+      })
+      .catch(console.error);
+  }, [token]);
+
+  // Update cities list when state is selected
+  useEffect(() => {
+    if (selectedState && locations[selectedState]) {
+      setCities(locations[selectedState]);
+      setSelectedCity('');
+    } else {
+      setCities([]);
+      setSelectedCity('');
+    }
+  }, [selectedState, locations]);
+
+  // Fetch Workers
+  const fetchWorkers = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+        sort_by: sortBy,
+        sort_order: sortOrder
+      });
+      if (selectedState) params.append('state', selectedState);
+      if (selectedCity) params.append('city', selectedCity);
+      if (selectedRole) params.append('category', selectedRole);
+      if (selectedStatus) params.append('status_filter', selectedStatus);
+      if (searchQuery) params.append('search', searchQuery);
+
+      const res = await fetch(`${API_BASE}/api/admin/workers?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWorkers(data.workers);
+        setTotalCount(data.total_count);
+      }
+    } catch (err) {
+      console.error("Failed to load professionals list:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch Live Bookings
+  const fetchActiveBookings = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/bookings/active`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveBookings(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fetch History Bookings
+  const fetchHistoryBookings = async () => {
+    if (!token) return;
+    try {
+      const params = new URLSearchParams({
+        range_filter: historyFilter,
+        limit: '25'
+      });
+      if (historySearch) params.append('search', historySearch);
+      const res = await fetch(`${API_BASE}/api/admin/bookings/history?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryBookings(data.bookings);
+        setHistoryTotal(data.total);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Auto trigger query on filter/pagination changes
+  useEffect(() => {
+    if (activeTab === 'fleet') {
+      fetchWorkers();
+    } else if (activeTab === 'live') {
+      fetchActiveBookings();
+    } else if (activeTab === 'history') {
+      fetchHistoryBookings();
+    }
+  }, [activeTab, selectedState, selectedCity, selectedRole, selectedStatus, limit, offset, sortBy, sortOrder, historyFilter]);
+
+  // Trigger search with delay
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (activeTab === 'fleet') {
+        setOffset(0);
+        setCurrentPage(1);
+        fetchWorkers();
+      } else if (activeTab === 'history') {
+        fetchHistoryBookings();
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, historySearch]);
+
+  // WebSocket Live Sync
+  useEffect(() => {
+    if (!user || !token) return;
+    
+    // Connect to WebSocket dynamically
+    const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${user.id}`;
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
+      ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${user.id}`
+      : defaultWsUrl;
+
+    console.log("Admin WebSocket connected:", wsUrl);
+    const socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        console.log("Admin Dashboard live update event:", msg);
+        
+        // Refresh appropriate lists depending on event
+        fetchActiveBookings();
+        fetchWorkers();
+      } catch (err) {
+        console.error("Error parsing admin WebSocket message:", err);
+      }
+    };
+
+    return () => socket.close();
+  }, [user, token]);
+
+  // Helper functions for actions
+  const handleSuspendWorker = async (workerId: string) => {
+    if (!confirm("Are you sure you want to suspend this professional?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/workers/${workerId}/suspend`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert("Professional suspended successfully!");
+        fetchWorkers();
+        if (selectedWorker && selectedWorker.id === workerId) {
+          setShowDrawer(false);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleActivateWorker = async (workerId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/workers/${workerId}/reactivate`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert("Professional activated successfully!");
+        fetchWorkers();
+        if (selectedWorker && selectedWorker.id === workerId) {
+          setShowDrawer(false);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteWorker = async (workerId: string) => {
+    if (!confirm("CRITICAL WARNING: This will permanently delete the professional and their profile metadata from the database. Proceed?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/workers/${workerId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert("Professional deleted permanently!");
+        fetchWorkers();
+        setShowDrawer(false);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Live Map Simulation coordinates generation when tracking selected booking
+  useEffect(() => {
+    if (!selectedBooking || selectedBooking.status !== 'ON_THE_WAY') {
+      setRoutePoints([]);
+      return;
+    }
+
+    const startCoords: [number, number] = [selectedBooking.latitude + 0.015, selectedBooking.longitude - 0.015];
+    const destCoords: [number, number] = [selectedBooking.latitude, selectedBooking.longitude];
+
+    // Generate Route points (interpolation)
+    const points: [number, number][] = [];
+    const steps = 60;
+    for (let i = 0; i <= steps; i++) {
+      const pct = i / steps;
+      const lat = startCoords[0] + (destCoords[0] - startCoords[0]) * pct;
+      const lng = startCoords[1] + (destCoords[1] - startCoords[1]) * pct;
+      points.push([lat, lng]);
+    }
+    setRoutePoints(points);
+    setTechIndex(0);
+
+    const interval = setInterval(() => {
+      setTechIndex((prev) => {
+        if (prev >= points.length - 1) {
+          clearInterval(interval);
+          return points.length - 1;
+        }
+        return prev + 1;
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [selectedBooking]);
+
+  const activeTechTrackingCoords = (selectedBooking && routePoints.length > 0 && routePoints[techIndex])
+    ? routePoints[techIndex]
+    : selectedBooking
+      ? [selectedBooking.tech_latitude || selectedBooking.latitude, selectedBooking.tech_longitude || selectedBooking.longitude] as [number, number]
+      : [26.4499, 80.3319];
+
+  return (
+    <div className="min-h-screen text-slate-100 flex flex-col pt-6 px-6 relative bg-slate-950 font-sans">
+      
+      {/* Header Info */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-bold uppercase tracking-widest">Administrative console</span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white mt-1">Fleet & Partner Management</h1>
+          <p className="text-xs text-slate-400 mt-0.5">Logged in as {user?.email} • Real-time database telemetry active.</p>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => logout()}
+            className="px-4 py-2 border border-white/5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-white/5 transition-all"
+          >
+            Log Out
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-white/5 mt-6 gap-2">
+        <button
+          onClick={() => setActiveTab('fleet')}
+          className={`px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'fleet' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          👤 Professionals Fleet ({totalCount})
+        </button>
+        <button
+          onClick={() => setActiveTab('live')}
+          className={`px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'live' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          ⚡ Live Bookings ({activeBookings.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 ${
+            activeTab === 'history' ? 'border-indigo-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          📖 Booking History ({historyTotal})
+        </button>
+      </div>
+
+      {/* Tab Contents */}
+      <div className="py-6 flex-1 flex flex-col">
+        {activeTab === 'fleet' && (
+          <div className="flex-1 flex flex-col">
+            
+            {/* Filtering Control Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4 rounded-xl border border-white/5 bg-slate-900/40 backdrop-blur-md mb-5">
+              
+              {/* State Filter */}
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">State</label>
+                <select
+                  value={selectedState}
+                  onChange={(e) => {
+                    setSelectedState(e.target.value);
+                    setOffset(0);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All States</option>
+                  {states.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* City Filter */}
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">City</label>
+                <select
+                  value={selectedCity}
+                  onChange={(e) => {
+                    setSelectedCity(e.target.value);
+                    setOffset(0);
+                    setCurrentPage(1);
+                  }}
+                  disabled={!selectedState}
+                  className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                  <option value="">All Cities</option>
+                  {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Role Filter */}
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Role</label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => {
+                    setSelectedRole(e.target.value);
+                    setOffset(0);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All Roles</option>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Booking Status</label>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => {
+                    setSelectedStatus(e.target.value);
+                    setOffset(0);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Available">🟢 Available</option>
+                  <option value="Busy">🟠 Busy</option>
+                  <option value="Offline">⚪ Offline</option>
+                  <option value="Suspended">🔴 Suspended</option>
+                </select>
+              </div>
+
+              {/* Instant Search */}
+              <div className="flex flex-col gap-1 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Search</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, phone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-600" />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Professionals Table */}
+            <div className="flex-1 overflow-x-auto rounded-xl border border-white/5 bg-slate-900/10 relative min-h-[300px]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[9px] font-bold">
+                    <th className="p-3.5">Photo</th>
+                    <th className="p-3.5">Name</th>
+                    <th className="p-3.5">Email</th>
+                    <th className="p-3.5">Phone</th>
+                    <th className="p-3.5">State</th>
+                    <th className="p-3.5">City</th>
+                    <th className="p-3.5">Role</th>
+                    <th 
+                      onClick={() => {
+                        setSortBy('rating');
+                        setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
+                      }}
+                      className="p-3.5 cursor-pointer hover:text-white"
+                    >
+                      Rating <ArrowUpDown className="inline w-3 h-3 ml-0.5" />
+                    </th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Current Booking</th>
+                    <th className="p-3.5">Wallet</th>
+                    <th className="p-3.5">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={idx} className="animate-pulse border-b border-white/5">
+                        <td className="p-3"><div className="w-8 h-8 rounded-full bg-white/5" /></td>
+                        <td className="p-3"><div className="w-24 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-32 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-20 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-16 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-16 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-20 h-5 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-10 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-16 h-5 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-24 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-12 h-4 bg-white/5 rounded animate-pulse" /></td>
+                        <td className="p-3"><div className="w-8 h-8 bg-white/5 rounded animate-pulse" /></td>
+                      </tr>
+                    ))
+                  ) : workers.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="text-center py-10 text-slate-500 text-xs">
+                        No professionals found matching the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    workers.map((w) => {
+                      const isSuspended = w.status === 'SUSPENDED';
+                      return (
+                        <tr key={w.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                          <td className="p-3">
+                            <img 
+                              src={w.profilePhoto} 
+                              alt={w.name} 
+                              className="w-8 h-8 rounded-full border border-slate-700 object-cover"
+                            />
+                          </td>
+                          <td className="p-3 font-bold text-white">{w.name}</td>
+                          <td className="p-3 text-slate-400">{w.email}</td>
+                          <td className="p-3 text-slate-400">{w.phone || '—'}</td>
+                          <td className="p-3 text-slate-300">{w.state || '—'}</td>
+                          <td className="p-3 text-slate-300">{w.city || '—'}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
+                              {w.category}
+                            </span>
+                          </td>
+                          <td className="p-3 font-bold text-amber-400">★ {w.rating.toFixed(1)}</td>
+                          <td className="p-3">
+                            {isSuspended ? (
+                              <span className="px-2 py-0.5 rounded bg-red-950/80 border border-red-900/30 text-red-400 text-[10px] font-bold">Suspended</span>
+                            ) : w.isAvailable ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-900/30 text-emerald-400 text-[10px] font-bold">Available</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-900/30 text-amber-400 text-[10px] font-bold">Busy</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {w.current_booking ? (
+                              <div className="flex flex-col text-left">
+                                <span className="font-semibold text-indigo-400 text-[10px]">#HS-{w.current_booking.id.substring(0, 8)}</span>
+                                <span className="text-[9px] text-slate-400">{w.current_booking.customer_name}</span>
+                                <span className="text-[8px] px-1 py-0.5 rounded bg-white/5 w-fit mt-0.5 text-cyan-400 uppercase tracking-wider">{w.current_booking.status.replace(/_/g, ' ')}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-600">No Booking</span>
+                            )}
+                          </td>
+                          <td className="p-3 font-semibold text-slate-200">₹{w.walletBalance}</td>
+                          <td className="p-3">
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedWorker(w);
+                                  setShowDrawer(true);
+                                }}
+                                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white"
+                                title="View Details"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              {isSuspended ? (
+                                <button
+                                  onClick={() => handleActivateWorker(w.id)}
+                                  className="p-1.5 rounded bg-emerald-950/85 hover:bg-emerald-900 text-emerald-400"
+                                  title="Reactivate Professional"
+                                >
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleSuspendWorker(w.id)}
+                                  className="p-1.5 rounded bg-red-950/85 hover:bg-red-900 text-red-400"
+                                  title="Suspend Professional"
+                                >
+                                  <UserX className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 text-xs text-slate-400">
+              <div>
+                Showing <span className="font-bold text-white">{workers.length}</span> of <span className="font-bold text-white">{totalCount}</span> partners
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={currentPage === 1 || loading}
+                  onClick={() => {
+                    setOffset(prev => Math.max(0, prev - limit));
+                    setCurrentPage(p => Math.max(1, p - 1));
+                  }}
+                  className="px-2.5 py-1.5 border border-white/5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-indigo-600/10 text-indigo-400 font-bold border border-indigo-500/20">
+                  Page {currentPage} of {Math.max(1, Math.ceil(totalCount / limit))}
+                </span>
+                <button
+                  disabled={currentPage >= Math.ceil(totalCount / limit) || loading}
+                  onClick={() => {
+                    setOffset(prev => prev + limit);
+                    setCurrentPage(p => p + 1);
+                  }}
+                  className="px-2.5 py-1.5 border border-white/5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {activeTab === 'live' && (
+          <div className="flex-1 flex flex-col">
+            
+            <div className="rounded-xl border border-white/5 bg-slate-900/10 overflow-x-auto min-h-[300px]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[9px] font-bold">
+                    <th className="p-3.5">Booking ID</th>
+                    <th className="p-3.5">Customer</th>
+                    <th className="p-3.5">Professional</th>
+                    <th className="p-3.5">Service Role</th>
+                    <th className="p-3.5">Live Status</th>
+                    <th className="p-3.5">Payment</th>
+                    <th className="p-3.5">Created At</th>
+                    <th className="p-3.5">Telemetry ETA</th>
+                    <th className="p-3.5">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeBookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-10 text-slate-500 text-xs">
+                        No active service bookings currently dispatching.
+                      </td>
+                    </tr>
+                  ) : (
+                    activeBookings.map((b) => {
+                      return (
+                        <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.01] transition-colors">
+                          <td className="p-3 font-bold text-indigo-400">#HS-{b.id.substring(0, 8)}</td>
+                          <td className="p-3">
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-white">{b.customer_name}</span>
+                              <span className="text-[10px] text-slate-500">{b.customer_phone}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-200">{b.provider_name}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-1 rounded bg-slate-800 text-slate-300 font-semibold border border-slate-700/30">
+                              {b.service_type}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              b.status === 'PENDING_PROVIDER_ACCEPTANCE' ? 'bg-amber-950/80 border border-amber-900/30 text-amber-400' :
+                              b.status === 'ON_THE_WAY' ? 'bg-sky-950/80 border border-sky-900/30 text-sky-400' :
+                              b.status === 'ARRIVED' ? 'bg-indigo-950/80 border border-indigo-900/30 text-indigo-400' :
+                              'bg-emerald-950/80 border border-emerald-900/30 text-emerald-400'
+                            }`}>
+                              {b.status.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-[10px] font-bold ${
+                              b.payment_status === 'PAID' ? 'text-emerald-400' : 'text-slate-400'
+                            }`}>
+                              {b.payment_status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-400">{new Date(b.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td className="p-3 font-semibold text-slate-200">
+                            {b.status === 'ON_THE_WAY' ? `${b.eta_minutes || 0} mins` : '—'}
+                          </td>
+                          <td className="p-3">
+                            <button
+                              onClick={() => {
+                                setSelectedBooking(b);
+                                setShowTrackModal(true);
+                              }}
+                              className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold font-sans transition-colors"
+                            >
+                              Track Live
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="flex-1 flex flex-col">
+            
+            <div className="flex flex-col sm:flex-row justify-between gap-3 mb-5">
+              <div className="flex border border-white/5 rounded-xl bg-slate-900/40 p-1 self-start">
+                {['all', 'today', 'yesterday', 'week', 'month'].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setHistoryFilter(f)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                      historyFilter === f ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search history by role..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-600" />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-slate-900/10 overflow-x-auto min-h-[300px]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[9px] font-bold">
+                    <th className="p-3.5">Booking ID</th>
+                    <th className="p-3.5">Customer</th>
+                    <th className="p-3.5">Professional</th>
+                    <th className="p-3.5">Service Role</th>
+                    <th className="p-3.5">Final Status</th>
+                    <th className="p-3.5">Payment</th>
+                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5">Bill</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyBookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-10 text-slate-500 text-xs">
+                        No historical records found matching current bounds.
+                      </td>
+                    </tr>
+                  ) : (
+                    historyBookings.map((b) => (
+                      <tr key={b.id} className="border-b border-white/5 text-slate-300">
+                        <td className="p-3 text-indigo-400 font-bold">#HS-{b.id.substring(0, 8)}</td>
+                        <td className="p-3 text-white">{b.customer_name}</td>
+                        <td className="p-3 text-slate-400">{b.provider_name}</td>
+                        <td className="p-3">{b.service_type}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            b.status === 'CANCELLED' ? 'bg-red-950/80 border border-red-900/30 text-red-400' : 'bg-slate-800 text-slate-300'
+                          }`}>
+                            {b.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400">{b.payment_status}</td>
+                        <td className="p-3 text-slate-400">{new Date(b.created_at).toLocaleDateString()}</td>
+                        <td className="p-3 font-bold text-white">₹{b.total_cost}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* Profile Side Drawer */}
+      <AnimatePresence>
+        {showDrawer && selectedWorker && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDrawer(false)}
+              className="fixed inset-0 bg-black z-[998]"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.3 }}
+              className="fixed top-0 right-0 h-full w-full sm:w-[480px] bg-slate-900 border-l border-white/5 shadow-2xl p-6 z-[999] overflow-y-auto flex flex-col text-left text-xs"
+            >
+              <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                <span className="text-sm font-black text-white">Professional KYC Profile</span>
+                <button
+                  onClick={() => setShowDrawer(false)}
+                  className="p-1 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-6 flex gap-4 items-center">
+                <img
+                  src={selectedWorker.profilePhoto}
+                  alt={selectedWorker.name}
+                  className="w-16 h-16 rounded-full border border-slate-700 object-cover"
+                />
+                <div>
+                  <h3 className="text-base font-black text-white">{selectedWorker.name}</h3>
+                  <p className="text-slate-400 mt-0.5">{selectedWorker.email}</p>
+                  <p className="text-slate-400">{selectedWorker.phone}</p>
+                </div>
+              </div>
+
+              {/* Stats boxes */}
+              <div className="grid grid-cols-3 gap-3 mt-6">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Category</span>
+                  <span className="text-xs font-bold text-indigo-400 mt-1 block">{selectedWorker.category}</span>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Success</span>
+                  <span className="text-xs font-bold text-emerald-400 mt-1 block">100%</span>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Wallet</span>
+                  <span className="text-xs font-bold text-white mt-1 block">₹{selectedWorker.walletBalance}</span>
+                </div>
+              </div>
+
+              {/* KYC Doc scans */}
+              <div className="mt-6">
+                <h4 className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-2">Verified Documents (Aadhaar & Selfie)</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="aspect-video bg-black/40 rounded-xl border border-slate-800 flex items-center justify-center text-slate-500 relative overflow-hidden">
+                    {selectedWorker.docs?.aadhaar ? (
+                      <img src={selectedWorker.docs.aadhaar} alt="Aadhaar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[10px]">Aadhaar Card Scan</span>
+                    )}
+                  </div>
+                  <div className="aspect-video bg-black/40 rounded-xl border border-slate-800 flex items-center justify-center text-slate-500 relative overflow-hidden">
+                    {selectedWorker.docs?.selfie ? (
+                      <img src={selectedWorker.docs.selfie} alt="Selfie" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[10px]">KYC Photo Selfie</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mini Location Map */}
+              <div className="mt-6">
+                <h4 className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-2">GPS Telemetry Coordinates</h4>
+                <div className="w-full h-36 rounded-xl border border-slate-800 overflow-hidden relative">
+                  <MapComponent
+                    center={[selectedWorker.latitude || 26.4499, selectedWorker.longitude || 80.3319]}
+                    customerMarker={[selectedWorker.latitude || 26.4499, selectedWorker.longitude || 80.3319]}
+                    theme="dark"
+                  />
+                  <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 border border-slate-800 text-[8px] text-slate-400 z-[400]">
+                    Lat: {selectedWorker.latitude?.toFixed(4)}, Lng: {selectedWorker.longitude?.toFixed(4)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bio & Skills */}
+              <div className="mt-6 flex flex-col gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Biography Bio</span>
+                  <p className="text-slate-300 mt-1">{selectedWorker.bio || 'No bio specified by professional.'}</p>
+                </div>
+                <div className="mt-2">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Skills Tags</span>
+                  <p className="text-slate-300 mt-1">{selectedWorker.skills || 'General repairs, maintenance'}</p>
+                </div>
+              </div>
+
+              {/* Suspended/Delete Actions for admin 9369022460sa@gmail.com */}
+              {user?.email === "9369022460sa@gmail.com" && (
+                <div className="mt-8 pt-6 border-t border-white/5 flex gap-3">
+                  {selectedWorker.status === 'SUSPENDED' ? (
+                    <button
+                      onClick={() => handleActivateWorker(selectedWorker.id)}
+                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-center text-xs transition-colors"
+                    >
+                      Reactivate Partner
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSuspendWorker(selectedWorker.id)}
+                      className="flex-1 py-2.5 bg-red-950/80 hover:bg-red-900 border border-red-900/30 text-red-400 rounded-lg font-bold text-center text-xs transition-colors"
+                    >
+                      Suspend Partner
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteWorker(selectedWorker.id)}
+                    className="py-2.5 px-4 bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white rounded-lg font-bold text-center text-xs transition-colors"
+                  >
+                    Delete Account
+                  </button>
+                </div>
+              )}
+
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Live Booking Tracking Map Modal */}
+      <AnimatePresence>
+        {showTrackModal && selectedBooking && (
+          <div className="fixed inset-0 flex items-center justify-center z-[1000] p-4 text-left">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTrackModal(false)}
+              className="absolute inset-0 bg-black"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-white/10 rounded-2xl p-5 shadow-2xl relative w-full max-w-xl z-10 flex flex-col gap-4 text-xs"
+            >
+              <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-white">Live Dispatched Booking Tracking</h3>
+                  <span className="text-[10px] text-indigo-400 mt-0.5 block">Booking #HS-{selectedBooking.id.substring(0, 8)} • Role: {selectedBooking.service_type}</span>
+                </div>
+                <button
+                  onClick={() => setShowTrackModal(false)}
+                  className="p-1 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tracking map component */}
+              <div className="w-full h-64 rounded-xl border border-slate-800 overflow-hidden relative">
+                <MapComponent
+                  center={[selectedBooking.latitude || 26.4499, selectedBooking.longitude || 80.3319]}
+                  customerMarker={[selectedBooking.latitude || 26.4499, selectedBooking.longitude || 80.3319]}
+                  techMarker={activeTechTrackingCoords}
+                  routeCoordinates={selectedBooking.status === 'ON_THE_WAY' ? routePoints : []}
+                  theme="dark"
+                />
+                
+                {/* Telemetry info layer */}
+                {selectedBooking.status === 'ON_THE_WAY' ? (
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded bg-indigo-950 border border-indigo-900 text-[10px] text-indigo-400 font-bold z-[400] animate-pulse">
+                    En Route Simulation Running
+                  </div>
+                ) : (
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[10px] text-slate-400 z-[400]">
+                    Status: {selectedBooking.status.replace(/_/g, ' ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Details card */}
+              <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-4">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Customer Details</span>
+                  <span className="font-bold text-white block mt-0.5">{selectedBooking.customer_name}</span>
+                  <span className="text-slate-400 block mt-0.5">{selectedBooking.customer_phone}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Technician Telemetry</span>
+                  <span className="font-bold text-white block mt-0.5">{selectedBooking.provider_name || 'Unassigned'}</span>
+                  <span className="text-slate-400 block mt-0.5">{selectedBooking.provider_phone || '—'}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end mt-2">
+                <button
+                  onClick={() => setShowTrackModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 font-semibold"
+                >
+                  Dismiss Tracking
+                </button>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+}
+
+function ProfessionalDashboardContent() {
+  const { user } = useAuth();
+  if (user?.email === '9369022460sa@gmail.com') {
+    return <AdminManagementDashboard />;
+  }
+  return <ProviderDashboardContent />;
+}
+
 export default function ProfessionalDashboard() {
   return (
-    <ProtectedRoute allowedRoles={["PROVIDER"]}>
+    <ProtectedRoute allowedRoles={["PROVIDER", "ADMIN", "SUPER_ADMIN"]}>
       <ProfessionalDashboardContent />
     </ProtectedRoute>
   );

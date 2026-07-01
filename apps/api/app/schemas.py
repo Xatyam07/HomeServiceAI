@@ -19,6 +19,7 @@ class UserCreate(BaseModel):
     skills: Optional[str] = None
     bio: Optional[str] = None
     address: Optional[str] = None
+    state: Optional[str] = None
     city: Optional[str] = None
     aadhaar_url: Optional[str] = None
     pan_url: Optional[str] = None
@@ -37,6 +38,7 @@ class ProviderProfileResponse(BaseModel):
     success_rate: float
     response_rate: float
     address: Optional[str] = None
+    state: Optional[str] = None
     city: Optional[str] = None
     skills: Optional[str] = None
     bio: Optional[str] = None

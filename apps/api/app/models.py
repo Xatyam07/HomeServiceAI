@@ -54,6 +54,7 @@ class ProviderProfile(Base):
     selfie_url = Column(String, nullable=True)
     certificate_url = Column(String, nullable=True)
     address = Column(String, nullable=True)
+    state = Column(String, nullable=True)
     city = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     skills = Column(String, nullable=True)

@@ -156,40 +156,103 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     }
 
 # 2. List Pending/All Professionals for Verification View
-@router.get("/workers", response_model=List[Dict[str, Any]])
+@router.get("/workers")
 def list_workers(
-    status_filter: str = Query(None), # PENDING, APPROVED, SUSPENDED
+    state: str = Query(None),
     city: str = Query(None),
     category: str = Query(None),
+    status_filter: str = Query(None),
+    search: str = Query(None),
+    limit: int = Query(25),
+    offset: int = Query(0),
+    sort_by: str = Query("newest"),
+    sort_order: str = Query("desc"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    query = db.query(User).filter(User.role == "PROVIDER")
-    if status_filter:
-        if status_filter == "PENDING":
-            query = query.filter(User.status.in_(["PENDING", "PENDING_APPROVAL"]))
-        else:
-            query = query.filter(User.status == status_filter)
-            
-    if city or category:
-        query = query.join(ProviderProfile, User.id == ProviderProfile.user_id)
-        if city:
-            query = query.filter(ProviderProfile.city.ilike(f"%{city}%"))
-        if category:
-            query = query.filter(ProviderProfile.category.ilike(f"%{category}%"))
+    query = db.query(User, ProviderProfile).filter(User.role == "PROVIDER")
+    query = query.join(ProviderProfile, User.id == ProviderProfile.user_id)
     
-    workers = query.all()
-    results = []
-    for w in workers:
-        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == w.id).first()
+    if state:
+        query = query.filter(ProviderProfile.state == state)
+    if city:
+        query = query.filter(ProviderProfile.city == city)
+    if category:
+        query = query.filter(ProviderProfile.category == category)
         
-        # Calculate real wallet balance from transactions
-        txs = db.query(WalletTransaction).filter(WalletTransaction.user_id == w.id).all()
+    if status_filter:
+        if status_filter == "Suspended":
+            query = query.filter(User.status == "SUSPENDED")
+        elif status_filter == "Available":
+            query = query.filter(User.status == "APPROVED", ProviderProfile.is_available == True)
+        elif status_filter == "Busy":
+            query = query.filter(User.status == "APPROVED", ProviderProfile.is_available == False)
+        elif status_filter == "Offline":
+            query = query.filter(User.status == "OFFLINE")
+
+    if search:
+        search_pat = f"%{search}%"
+        query = query.filter(
+            (User.name.ilike(search_pat)) |
+            (User.email.ilike(search_pat)) |
+            (User.phone.ilike(search_pat)) |
+            (ProviderProfile.category.ilike(search_pat)) |
+            (ProviderProfile.city.ilike(search_pat))
+        )
+
+    # Sorting
+    if sort_by == "newest":
+        query = query.order_by(ProviderProfile.created_at.desc() if sort_order == "desc" else ProviderProfile.created_at.asc())
+    elif sort_by == "rating":
+        query = query.order_by(ProviderProfile.rating.desc() if sort_order == "desc" else ProviderProfile.rating.asc())
+    elif sort_by == "completed_jobs":
+        query = query.order_by(ProviderProfile.jobs_completed.desc() if sort_order == "desc" else ProviderProfile.jobs_completed.asc())
+    elif sort_by == "wallet":
+        query = query.order_by(User.created_at.desc())
+    elif sort_by == "revenue":
+        query = query.order_by(ProviderProfile.jobs_completed.desc())
+    else:
+        query = query.order_by(User.created_at.desc())
+
+    total_count = query.count()
+    
+    # Paginated results
+    workers = query.offset(offset).limit(limit).all()
+    worker_ids = [w.id for w, _ in workers]
+
+    # Batch load WalletTransaction
+    all_txs = db.query(WalletTransaction).filter(WalletTransaction.user_id.in_(worker_ids)).all() if worker_ids else []
+    txs_by_user = {}
+    for t in all_txs:
+        txs_by_user.setdefault(t.user_id, []).append(t)
+
+    # Batch load active bookings along with customer info
+    active_statuses = ["ASSIGNED", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "OTP_VERIFIED", "SERVICE_STARTED", "SERVICE_COMPLETED", "PAYMENT_PENDING", "PENDING_PROVIDER_ACCEPTANCE"]
+    all_active = db.query(Booking, User.name, User.phone).join(User, Booking.customer_id == User.id).filter(
+        Booking.provider_id.in_(worker_ids),
+        Booking.status.in_(active_statuses)
+    ).all() if worker_ids else []
+    active_by_user = {b[0].provider_id: (b[0], b[1], b[2]) for b in all_active}
+
+    results = []
+    for w, profile in workers:
+        txs = txs_by_user.get(w.id, [])
         w_balance = max(
             sum(t.amount for t in txs if t.type == "CREDIT") - 
             sum(t.amount for t in txs if t.type == "DEBIT"),
             0.0
         )
+        
+        active_info = active_by_user.get(w.id)
+        current_booking = None
+        if active_info:
+            b_obj, cust_name, cust_phone = active_info
+            current_booking = {
+                "id": str(b_obj.id),
+                "customer_name": cust_name,
+                "customer_phone": cust_phone,
+                "status": b_obj.status
+            }
         
         results.append({
             "id": str(w.id),
@@ -206,16 +269,120 @@ def list_workers(
             "rating": profile.rating if profile else 5.0,
             "latitude": profile.latitude if profile else 0.0,
             "longitude": profile.longitude if profile else 0.0,
+            "state": profile.state if profile else "",
             "city": profile.city if profile else "",
             "skills": profile.skills if profile else "",
             "bio": profile.bio if profile else "",
+            "jobs_completed": profile.jobs_completed if profile else 0,
+            "current_booking": current_booking,
             "docs": {
                 "aadhaar": profile.aadhaar_url if profile else None,
                 "selfie": profile.selfie_url if profile else None,
                 "certificate": profile.certificate_url if profile else None
             }
         })
+        
+    return {
+        "total_count": total_count,
+        "workers": results
+    }
+
+@router.get("/locations")
+def get_locations(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    profiles = db.query(ProviderProfile.state, ProviderProfile.city).distinct().all()
+    locations = {}
+    for state, city in profiles:
+        if not state or not city:
+            continue
+        if state not in locations:
+            locations[state] = []
+        if city not in locations[state]:
+            locations[state].append(city)
+    return locations
+
+@router.get("/bookings/active")
+def get_active_bookings(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    active_statuses = [
+        "PENDING_PROVIDER_ACCEPTANCE", "ACCEPTED", "ON_THE_WAY", "ARRIVED", 
+        "OTP_VERIFIED", "SERVICE_STARTED", "SERVICE_COMPLETED", "PAYMENT_PENDING", "PAYMENT_COMPLETED", "REVIEW_PENDING"
+    ]
+    bookings = db.query(Booking).filter(Booking.status.in_(active_statuses)).order_by(Booking.created_at.desc()).all()
+    results = []
+    for b in bookings:
+        customer = db.query(User).filter(User.id == b.customer_id).first()
+        provider = db.query(User).filter(User.id == b.provider_id).first() if b.provider_id else None
+        results.append({
+            "id": str(b.id),
+            "customer_name": customer.name if customer else "Unknown",
+            "customer_phone": customer.phone if customer else "",
+            "provider_name": provider.name if provider else "Unassigned",
+            "provider_phone": provider.phone if provider else "",
+            "service_type": b.service_type,
+            "status": b.status,
+            "payment_status": b.payment_status,
+            "created_at": b.created_at.isoformat(),
+            "total_cost": b.total_cost,
+            "latitude": b.latitude,
+            "longitude": b.longitude,
+            "tech_latitude": b.tech_latitude,
+            "tech_longitude": b.tech_longitude,
+            "eta_minutes": b.eta_minutes
+        })
     return results
+
+@router.get("/bookings/history")
+def get_booking_history(
+    range_filter: str = Query("all"),
+    search: str = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    query = db.query(Booking).filter(Booking.status.in_(["COMPLETED", "CLOSED", "CANCELLED"]))
+    
+    now = datetime.utcnow()
+    if range_filter == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.filter(Booking.created_at >= start)
+    elif range_filter == "yesterday":
+        start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+        query = query.filter(Booking.created_at >= start, Booking.created_at < end)
+    elif range_filter == "week":
+        start = now - timedelta(days=7)
+        query = query.filter(Booking.created_at >= start)
+    elif range_filter == "month":
+        start = now - timedelta(days=30)
+        query = query.filter(Booking.created_at >= start)
+
+    if search:
+        try:
+            val_uuid = UUID(search)
+            query = query.filter(Booking.id == val_uuid)
+        except ValueError:
+            query = query.filter(Booking.service_type.ilike(f"%{search}%"))
+
+    total = query.count()
+    bookings = query.order_by(Booking.created_at.desc()).offset(offset).limit(limit).all()
+    results = []
+    for b in bookings:
+        customer = db.query(User).filter(User.id == b.customer_id).first()
+        provider = db.query(User).filter(User.id == b.provider_id).first() if b.provider_id else None
+        results.append({
+            "id": str(b.id),
+            "customer_name": customer.name if customer else "Unknown",
+            "provider_name": provider.name if provider else "Unassigned",
+            "service_type": b.service_type,
+            "status": b.status,
+            "payment_status": b.payment_status,
+            "created_at": b.created_at.isoformat(),
+            "total_cost": b.total_cost
+        })
+    return {
+        "total": total,
+        "bookings": results
+    }
 
 class AdminWorkerEditSchema(BaseModel):
     name: Optional[str] = None
@@ -576,4 +743,55 @@ def force_logout_user(user_id: UUID, db: Session = Depends(get_db), current_user
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     return {"status": "SUCCESS", "message": f"User {user.name} has been forced to log out from all active devices."}
+
+# 18. Delete Worker (Admin Action)
+@router.delete("/workers/{worker_id}")
+async def delete_worker(worker_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    worker = db.query(User).filter(User.id == worker_id, User.role == "PROVIDER").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Professional not found.")
+    db.delete(worker)
+    db.commit()
+    return {"status": "SUCCESS", "message": f"Professional deleted successfully."}
+
+# 19. Change Worker Role (Admin Action)
+class ChangeRoleSchema(BaseModel):
+    category: str
+
+@router.put("/workers/{worker_id}/role")
+async def change_worker_role(worker_id: UUID, dto: ChangeRoleSchema, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == worker_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found.")
+    profile.category = dto.category
+    db.commit()
+    return {"status": "SUCCESS", "message": f"Professional role updated to {dto.category}."}
+
+# 20. Assign/Transfer Booking (Admin Action)
+class AssignBookingSchema(BaseModel):
+    provider_id: UUID
+
+@router.post("/bookings/{booking_id}/assign")
+async def assign_booking(booking_id: UUID, dto: AssignBookingSchema, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+    provider = db.query(User).filter(User.id == dto.provider_id, User.role == "PROVIDER").first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Professional not found.")
+    
+    booking.provider_id = dto.provider_id
+    booking.status = "ACCEPTED"
+    db.commit()
+    
+    # Broadcast status updates
+    from app.routers.bookings import manager
+    await manager.broadcast({
+        "event": "booking_accepted",
+        "booking_id": str(booking.id),
+        "status": booking.status,
+        "provider_id": str(provider.id)
+    })
+    
+    return {"status": "SUCCESS", "message": f"Booking successfully assigned to {provider.name}."}
 
