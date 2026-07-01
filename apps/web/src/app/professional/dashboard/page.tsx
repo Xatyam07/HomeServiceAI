@@ -10,10 +10,23 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useRouter } from 'next/navigation';
 
 function ProfessionalDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const router = useRouter();
   const { user, logout, token, refreshUserProfile } = useAuth();
+
+  // Enforce role checks redirection
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'CUSTOMER') {
+        router.push('/customer/dashboard');
+      } else if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') {
+        router.push('/admin/dashboard');
+      }
+    }
+  }, [user, router]);
   
   // Testing mode states for multi-skill professional
   const [switching, setSwitching] = useState(false);

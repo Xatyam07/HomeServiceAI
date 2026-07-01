@@ -3,10 +3,10 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Search, Calendar, CreditCard, Sparkles, MapPin, 
-  ArrowRight, ShieldCheck, Clock, Zap, Wrench, Cpu, 
-  Paintbrush, Flame, Shield, HelpCircle, History, 
+import {
+  Search, Calendar, CreditCard, Sparkles, MapPin,
+  ArrowRight, ShieldCheck, Clock, Zap, Wrench, Cpu,
+  Paintbrush, Flame, Shield, HelpCircle, History,
   AlertTriangle, DollarSign, X, Check, MessageSquare, Send, UserCheck, Star, LogOut, User as UserIcon,
   Mic, Paperclip, Mail
 } from 'lucide-react';
@@ -67,7 +67,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, logout, refreshUserProfile, firebaseUser, sendVerification } = useAuth();
-  
+
   // Email verification state
   const [emailVerified, setEmailVerified] = useState(true);
 
@@ -100,7 +100,7 @@ function DashboardContent() {
   const [problemDescription, setProblemDescription] = useState('');
   const [isEmergency, setIsEmergency] = useState(false);
   const [diagnosing, setDiagnosing] = useState(false);
-  
+
   // Tab selections
   const [customerTab, setCustomerTab] = useState<'home' | 'bookings' | 'wallet' | 'loyalty' | 'profile' | 'support'>('home');
   const [walletBalance, setWalletBalance] = useState(1200);
@@ -186,7 +186,7 @@ function DashboardContent() {
     { id: 'TKT-772', subject: 'Billing anomaly - double charge', status: 'OPEN', date: '2026-06-30' },
     { id: 'TKT-551', subject: 'KYC upload delay', status: 'RESOLVED', date: '2026-06-28' }
   ]);
-  
+
   // Profile settings
   const [editName, setEditName] = useState(user?.name || '');
   const [editPhone, setEditPhone] = useState(user?.phone || '');
@@ -257,7 +257,7 @@ function DashboardContent() {
     try {
       const response = await fetch(`${API_BASE}/api/auth/register-profile`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -279,10 +279,10 @@ function DashboardContent() {
       setIsSavingProfile(false);
     }
   };
-  
+
   // AI Diagnostics Results
   const [aiReport, setAiReport] = useState<any>(null);
-  
+
   // Match Pros
   const [matchingPros, setMatchingPros] = useState<any[]>([]);
   const [selectedPro, setSelectedPro] = useState<any>(null);
@@ -291,7 +291,7 @@ function DashboardContent() {
   const [priceFilter, setPriceFilter] = useState('');
   const [expFilter, setExpFilter] = useState('');
   const [verifiedFilter, setVerifiedFilter] = useState(false);
-  
+
   // Booking Info
   const [scheduledTime, setScheduledTime] = useState('');
   const [address, setAddress] = useState('Flat 405, Block B, Rainbow Residency, Hitec City, Hyderabad');
@@ -343,7 +343,7 @@ function DashboardContent() {
   const [chatMessages, setChatMessages] = useState<any[]>([
     { sender: 'ai', text: "Hello! I am your HomeSphere AI Assistant. How can I help you today? (e.g. My AC isn't cooling, tap is leaking...)" }
   ]);
-  const [suggestedReplies, setSuggestedReplies] = useState<Array<{label: string, cmd: string}>>([
+  const [suggestedReplies, setSuggestedReplies] = useState<Array<{ label: string, cmd: string }>>([
     { label: "🚰 Sink Leak", cmd: "Kitchen sink is leaking under the wooden cabinet" },
     { label: "❄️ AC Rattling", cmd: "AC is running but making a rattling noise" },
     { label: "⚡ Switch Sparks", cmd: "Sparks coming from the bedroom light switch" },
@@ -367,7 +367,7 @@ function DashboardContent() {
   const runDiagnostics = async () => {
     if (!selectedService) return;
     setDiagnosing(true);
-    
+
     // 1. Simulate AI Diagnosis
     let duration = 60;
     let complexity = "MODERATE";
@@ -417,14 +417,14 @@ function DashboardContent() {
       if (verifiedFilter) url.searchParams.append('verified_only', 'true');
 
       const res = await fetch(url.toString(), {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (!res.ok) throw new Error("Search failed");
       const data = await res.json();
-      
+
       const scored = data.map((c: any) => {
         const distance = c.distance_km || (4.0 + Math.random() * 5);
         const distScore = Math.max(0, 100 - (distance * 7.5));
@@ -434,7 +434,7 @@ function DashboardContent() {
         const relScore = ((c.response_rate || 90) * 0.4) + ((c.success_rate || 95) * 0.6);
         const total = (distScore * 0.3) + (ratingScore * 0.25) + (expScore * 0.15) + (priceScore * 0.15) + (relScore * 0.15);
         const eta = Math.max(4, Math.round(distance * 2.8 + 6));
-        
+
         return {
           id: c.id,
           name: c.name,
@@ -461,7 +461,7 @@ function DashboardContent() {
         const relScore = (c.response * 0.4) + (c.success * 0.6);
         const total = (distScore * 0.3) + (ratingScore * 0.25) + (expScore * 0.15) + (priceScore * 0.15) + (relScore * 0.15);
         const eta = Math.max(4, Math.round(c.distance * 2.8 + 6));
-        
+
         return {
           ...c,
           matchScore: Math.round(total),
@@ -503,7 +503,7 @@ function DashboardContent() {
     try {
       const res = await fetch(`${API_BASE}/api/bookings/`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -539,7 +539,7 @@ function DashboardContent() {
       } else {
         const chargeAmt = paymentMethod === 'PARTIAL' ? finalBill * 0.10 : finalBill;
         const pType = paymentMethod === 'PARTIAL' ? 'PARTIAL_ADVANCE' : 'FULL_BEFORE';
-        
+
         const orderPayload = {
           booking_id: booking.id,
           user_id: booking.customer_id,
@@ -548,10 +548,10 @@ function DashboardContent() {
           coupon_code: couponCode || null,
           tip_amount: tipAmount
         };
-        
+
         const orderRes = await fetch(`${API_BASE}/api/payments/order`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -569,10 +569,10 @@ function DashboardContent() {
           razorpay_payment_id: `pay_test_${Math.random().toString(36).substring(7)}`,
           signature: "test_signature_success"
         };
-        
+
         const verifyRes = await fetch(`${API_BASE}/api/payments/verify`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -641,9 +641,9 @@ function DashboardContent() {
         })));
       }
 
-      setChatMessages(prev => [...prev, { 
-        sender: 'ai', 
-        text: response, 
+      setChatMessages(prev => [...prev, {
+        sender: 'ai',
+        text: response,
         matches: data.matched_professionals || [],
         recommended_service: data.recommended_service
       }]);
@@ -697,7 +697,7 @@ function DashboardContent() {
           <div className="w-16 h-16 rounded-full bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400">
             <Mail size={32} className="animate-pulse" />
           </div>
-          
+
           <div className="flex flex-col gap-2">
             <h2 className="font-extrabold text-xl tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
               Verify Your Email
@@ -714,7 +714,7 @@ function DashboardContent() {
             >
               I Have Verified My Email
             </button>
-            
+
             <button
               onClick={async () => {
                 try {
@@ -756,17 +756,16 @@ function DashboardContent() {
 
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => setCustomerTab('profile')}
-                className={`px-3 py-1 rounded-lg border transition-all ${
-                  customerTab === 'profile' 
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300' 
-                    : 'bg-slate-900 border-transparent hover:border-slate-800'
-                }`}
+                className={`px-3 py-1 rounded-lg border transition-all ${customerTab === 'profile'
+                  ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                  : 'bg-slate-900 border-transparent hover:border-slate-800'
+                  }`}
               >
                 Edit Profile
               </button>
-              <button 
+              <button
                 onClick={logout}
                 className="px-3 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/30 flex items-center gap-1 transition-all"
               >
@@ -784,7 +783,7 @@ function DashboardContent() {
           </div>
         </div>
       </header>
-      
+
       {/* Sub-header Tab Bar */}
       <div className="max-w-7xl mx-auto px-6 mt-6 flex flex-wrap gap-3 border-b border-slate-900 pb-2.5 w-full text-left">
         {[
@@ -798,11 +797,10 @@ function DashboardContent() {
           <button
             key={tab.id}
             onClick={() => setCustomerTab(tab.id as any)}
-            className={`px-4.5 py-2 text-xs font-bold uppercase transition-all rounded-lg ${
-              customerTab === tab.id
-                ? 'bg-indigo-650 text-white shadow-md'
-                : 'bg-black/30 text-slate-500 hover:text-slate-300'
-            }`}
+            className={`px-4.5 py-2 text-xs font-bold uppercase transition-all rounded-lg ${customerTab === tab.id
+              ? 'bg-indigo-650 text-white shadow-md'
+              : 'bg-black/30 text-slate-500 hover:text-slate-300'
+              }`}
           >
             {tab.label}
           </button>
@@ -815,7 +813,7 @@ function DashboardContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
             {/* Left Side: Booking Wizard (8 cols) */}
             <div className="lg:col-span-8 flex flex-col gap-6">
-              
+
               <div className="rounded-2xl glass p-6 border border-white/5 relative overflow-hidden">
                 {/* Step header */}
                 <div className="flex justify-between items-center pb-4 border-b border-slate-900 mb-6">
@@ -859,11 +857,10 @@ function DashboardContent() {
                             <button
                               key={svc.name}
                               onClick={() => setSelectedService(svc.name)}
-                              className={`p-4 rounded-xl border flex flex-col items-center gap-2 text-center transition-all ${
-                                isSelected 
-                                  ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md' 
-                                  : 'bg-black/20 border-slate-900 hover:border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
+                              className={`p-4 rounded-xl border flex flex-col items-center gap-2 text-center transition-all ${isSelected
+                                ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md'
+                                : 'bg-black/20 border-slate-900 hover:border-slate-800 text-slate-400 hover:text-slate-200'
+                                }`}
                             >
                               <Icon size={20} />
                               <span className="text-xs font-semibold">{svc.name}</span>
@@ -883,11 +880,11 @@ function DashboardContent() {
                       >
                         <option value="" className="bg-slate-950 text-slate-200">-- Choose Category --</option>
                         {[
-                          "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "RO Repair", "Refrigerator Repair", 
-                          "Washing Machine Repair", "TV Repair", "Laptop Repair", "Mobile Repair", "CCTV Installation", 
-                          "Pest Control", "Deep Cleaning", "Sofa Cleaning", "Bathroom Cleaning", "Kitchen Cleaning", 
-                          "Home Painting", "Interior Designer", "Appliance Installation", "Packers & Movers", "Home Tutor", 
-                          "Fitness Trainer", "Yoga Instructor", "Beautician", "Makeup Artist", "Pet Care", "Elder Care", 
+                          "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "RO Repair", "Refrigerator Repair",
+                          "Washing Machine Repair", "TV Repair", "Laptop Repair", "Mobile Repair", "CCTV Installation",
+                          "Pest Control", "Deep Cleaning", "Sofa Cleaning", "Bathroom Cleaning", "Kitchen Cleaning",
+                          "Home Painting", "Interior Designer", "Appliance Installation", "Packers & Movers", "Home Tutor",
+                          "Fitness Trainer", "Yoga Instructor", "Beautician", "Makeup Artist", "Pet Care", "Elder Care",
                           "Babysitter", "Driver on Demand"
                         ].map((cat) => (
                           <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
@@ -901,7 +898,7 @@ function DashboardContent() {
                       <div className="grid grid-cols-2 gap-3.5">
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] text-slate-500">Service City</label>
-                          <select 
+                          <select
                             value={cityFilter}
                             onChange={(e) => setCityFilter(e.target.value)}
                             className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer font-semibold text-xs"
@@ -912,10 +909,10 @@ function DashboardContent() {
                             ))}
                           </select>
                         </div>
-                        
+
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] text-slate-500">Min Rating</label>
-                          <select 
+                          <select
                             value={ratingFilter}
                             onChange={(e) => setRatingFilter(e.target.value)}
                             className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer font-semibold text-xs"
@@ -928,7 +925,7 @@ function DashboardContent() {
 
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] text-slate-500">Max Hourly Price (₹/hr)</label>
-                          <input 
+                          <input
                             type="number"
                             placeholder="e.g. 500"
                             value={priceFilter}
@@ -939,7 +936,7 @@ function DashboardContent() {
 
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] text-slate-500">Min Experience (Yrs)</label>
-                          <input 
+                          <input
                             type="number"
                             placeholder="e.g. 5"
                             value={expFilter}
@@ -951,7 +948,7 @@ function DashboardContent() {
 
                       <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-900/60 mt-1">
                         <label className="text-[10px] text-slate-500 font-semibold">Verified Professionals Only</label>
-                        <input 
+                        <input
                           type="checkbox"
                           checked={verifiedFilter}
                           onChange={(e) => setVerifiedFilter(e.target.checked)}
@@ -1046,13 +1043,12 @@ function DashboardContent() {
                             <span className="text-slate-500 py-4 text-center">No providers located matching your filters.</span>
                           ) : (
                             matchingPros.map((pro, idx) => (
-                              <div 
+                              <div
                                 key={pro.id || idx}
                                 onClick={() => setSelectedPro(pro)}
-                                className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition-all ${
-                                  selectedPro?.name === pro.name 
-                                    ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md' 
-                                    : 'bg-black/20 border-slate-900 hover:border-slate-800'
+                                className={`p-4 rounded-xl border flex justify-between items-center cursor-pointer transition-all ${selectedPro?.name === pro.name
+                                  ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md'
+                                  : 'bg-black/20 border-slate-900 hover:border-slate-800'
                                   }`}
                               >
                                 <div className="flex items-center gap-3">
@@ -1161,7 +1157,7 @@ function DashboardContent() {
                             <span>Search</span>
                           </button>
                         </div>
-                        
+
                         {/* Nominatim Suggestions dropdown */}
                         {geoResults.length > 0 && (
                           <div className="absolute top-[76px] left-0 right-0 z-45 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 flex flex-col max-h-[200px] overflow-y-auto">
@@ -1228,11 +1224,10 @@ function DashboardContent() {
                               key={t}
                               type="button"
                               onClick={() => setTipAmount(t)}
-                              className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-                                tipAmount === t
-                                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                                  : 'bg-black/20 border-slate-900 text-slate-400'
-                              }`}
+                              className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${tipAmount === t
+                                ? 'bg-indigo-600 border-indigo-500 text-white'
+                                : 'bg-black/20 border-slate-900 text-slate-400'
+                                }`}
                             >
                               {t === 0 ? 'No Tip' : `₹${t}`}
                             </button>
@@ -1272,9 +1267,9 @@ function DashboardContent() {
                         <span>Total Estimated Payment</span>
                         <span className="text-indigo-400">
                           ₹{Math.max(
-                            (isEmergency 
-                              ? Math.round((selectedPro.rate + 150) * 1.18) 
-                              : Math.round(selectedPro.rate * 1.18)) - discountAmount + tipAmount, 
+                            (isEmergency
+                              ? Math.round((selectedPro.rate + 150) * 1.18)
+                              : Math.round(selectedPro.rate * 1.18)) - discountAmount + tipAmount,
                             0.0
                           ).toFixed(2)}
                         </span>
@@ -1322,7 +1317,7 @@ function DashboardContent() {
                   <History size={15} className="text-indigo-400" />
                   <span>Booking Telemetry</span>
                 </h3>
-                
+
                 <div className="flex flex-col gap-3">
                   <div className="flex justify-between items-center p-3 rounded-lg bg-black/20 border border-slate-900">
                     <div className="flex flex-col">
@@ -1456,7 +1451,7 @@ function DashboardContent() {
         {customerTab === 'profile' && (
           <form onSubmit={handleSaveProfile} className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-6 text-left max-w-2xl mx-auto">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">Edit Customer Profile</h3>
-            
+
             <div className="flex items-center gap-4.5 p-4 bg-black/20 border border-slate-900 rounded-xl">
               <div className="w-16 h-16 rounded-full bg-slate-850 flex items-center justify-center font-bold text-sm overflow-hidden border border-slate-800 shrink-0">
                 {profilePhoto ? (
@@ -1467,13 +1462,13 @@ function DashboardContent() {
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-xs text-slate-300">Choose Profile Picture</span>
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   onChange={handleProfilePhotoUpload}
                   id="customer-profile-photo-upload"
                   className="hidden"
                 />
-                <label 
+                <label
                   htmlFor="customer-profile-photo-upload"
                   className="px-3 py-1.5 border border-dashed rounded-lg border-slate-800 hover:bg-white/5 text-slate-400 cursor-pointer w-fit text-xs"
                 >
@@ -1485,7 +1480,7 @@ function DashboardContent() {
             <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Full Name</label>
-                <input 
+                <input
                   type="text"
                   required
                   value={editName}
@@ -1496,7 +1491,7 @@ function DashboardContent() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Phone Number</label>
-                <input 
+                <input
                   type="text"
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
@@ -1521,7 +1516,7 @@ function DashboardContent() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Date of Birth</label>
-                <input 
+                <input
                   type="date"
                   value={dob}
                   onChange={(e) => setDob(e.target.value)}
@@ -1537,7 +1532,7 @@ function DashboardContent() {
                 {savedAddresses.map((addr, idx) => (
                   <div key={addr.label} className="p-3 bg-black/20 border border-slate-900 rounded-xl flex flex-col gap-1">
                     <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">{addr.label} Address</span>
-                    <input 
+                    <input
                       type="text"
                       value={addr.val}
                       onChange={(e) => {
@@ -1556,7 +1551,7 @@ function DashboardContent() {
             <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Emergency Contact Name</label>
-                <input 
+                <input
                   type="text"
                   value={emergencyContact.name}
                   onChange={(e) => setEmergencyContact(prev => ({ ...prev, name: e.target.value }))}
@@ -1565,7 +1560,7 @@ function DashboardContent() {
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Emergency Contact Phone</label>
-                <input 
+                <input
                   type="text"
                   value={emergencyContact.phone}
                   onChange={(e) => setEmergencyContact(prev => ({ ...prev, phone: e.target.value }))}
@@ -1597,7 +1592,7 @@ function DashboardContent() {
               </div>
             </div>
 
-            <button 
+            <button
               type="submit"
               disabled={isSavingProfile}
               className="py-3 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg flex items-center justify-center gap-1.5"
@@ -1605,7 +1600,7 @@ function DashboardContent() {
               {isSavingProfile ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                <span>Save Changes to PostgreSQL</span>
+                <span>Save Changes</span>
               )}
             </button>
           </form>
@@ -1616,7 +1611,7 @@ function DashboardContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
             <div className="lg:col-span-8 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
               <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Support Tickets</h3>
-              
+
               <div className="flex flex-col gap-3 text-xs">
                 {supportTickets.map((t) => (
                   <div key={t.id} className="p-4 bg-black/20 border border-slate-900 rounded-xl flex justify-between items-center">
@@ -1624,11 +1619,10 @@ function DashboardContent() {
                       <span className="font-bold text-slate-300 block">{t.subject}</span>
                       <span className="text-[9px] text-slate-500 mt-1 block">Ticket ID: {t.id} • Registered: {t.date}</span>
                     </div>
-                    <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${
-                      t.status === 'OPEN'
-                        ? 'bg-rose-950/60 text-rose-400 border border-rose-900/30'
-                        : 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/30'
-                    }`}>
+                    <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${t.status === 'OPEN'
+                      ? 'bg-rose-950/60 text-rose-400 border border-rose-900/30'
+                      : 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/30'
+                      }`}>
                       {t.status}
                     </span>
                   </div>
@@ -1671,7 +1665,7 @@ function DashboardContent() {
                     </span>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setChatOpen(false)}
                   className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
                 >
@@ -1682,16 +1676,15 @@ function DashboardContent() {
               {/* Message List */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 text-xs scrollbar-thin">
                 {chatMessages.map((msg, i) => (
-                  <div 
-                    key={i} 
-                    className={`max-w-[85%] p-3 rounded-xl text-left leading-relaxed ${
-                      msg.sender === 'ai' 
-                        ? 'bg-slate-900 border border-slate-800 text-slate-350 mr-auto rounded-tl-none' 
-                        : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
-                    }`}
+                  <div
+                    key={i}
+                    className={`max-w-[85%] p-3 rounded-xl text-left leading-relaxed ${msg.sender === 'ai'
+                      ? 'bg-slate-900 border border-slate-800 text-slate-350 mr-auto rounded-tl-none'
+                      : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
+                      }`}
                   >
                     <div className="whitespace-pre-wrap">{msg.text}</div>
-                    
+
                     {msg.matches && msg.matches.length > 0 && (
                       <div className="mt-3 flex flex-col gap-2 w-full border-t border-slate-800/80 pt-2.5">
                         <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-wider block">Top Matches:</span>
@@ -1699,8 +1692,8 @@ function DashboardContent() {
                           {msg.matches.map((pro: any) => (
                             <div key={pro.id} className="p-2.5 bg-black/45 border border-slate-800 rounded-xl flex items-center justify-between gap-2.5 text-left">
                               <div className="flex items-center gap-2">
-                                <img 
-                                  src={pro.profile_photo} 
+                                <img
+                                  src={pro.profile_photo}
                                   alt={pro.name}
                                   className="w-8 h-8 rounded-full border border-slate-700 object-cover"
                                 />
@@ -1738,7 +1731,7 @@ function DashboardContent() {
                     )}
                   </div>
                 ))}
-                
+
                 {isChatTyping && (
                   <div className="flex gap-1.5 items-center p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 mr-auto w-fit">
                     <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -1776,15 +1769,14 @@ function DashboardContent() {
                 >
                   <Paperclip size={14} />
                 </button>
-                
+
                 <button
                   onClick={handleSimulateVoice}
                   title="Voice Command Dictation"
-                  className={`p-2 rounded-lg transition-all ${
-                    voiceRecording 
-                      ? 'bg-red-600 text-white animate-pulse' 
-                      : 'bg-black/40 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`p-2 rounded-lg transition-all ${voiceRecording
+                    ? 'bg-red-600 text-white animate-pulse'
+                    : 'bg-black/40 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200'
+                    }`}
                 >
                   <Mic size={14} />
                 </button>
@@ -1797,7 +1789,7 @@ function DashboardContent() {
                   onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
                   className="flex-1 bg-black/40 border border-slate-800 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-white"
                 />
-                
+
                 <button
                   onClick={() => handleChatSend()}
                   className="p-2.5 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-white transition-colors"

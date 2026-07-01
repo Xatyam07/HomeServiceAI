@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -24,7 +25,19 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 
 function AdminDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const router = useRouter();
   const { user, token, logout, refreshUserProfile } = useAuth();
+
+  // Enforce administrative role redirection
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'CUSTOMER') {
+        router.push('/customer/dashboard');
+      } else if (user.role === 'PROVIDER') {
+        router.push('/professional/dashboard');
+      }
+    }
+  }, [user, router]);
   
   // Enterprise administrative tabs
   const [adminTab, setAdminTab] = useState<any>('dashboard');
