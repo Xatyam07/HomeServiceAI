@@ -112,6 +112,18 @@ class Booking(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    @property
+    def customer_name(self):
+        return self.customer.name if self.customer else None
+
+    @property
+    def customer_email(self):
+        return self.customer.email if self.customer else None
+
+    @property
+    def has_review(self):
+        return self.review is not None
+
     # Relationships
     customer = relationship("User", foreign_keys=[customer_id], back_populates="bookings_as_customer")
     provider = relationship("User", foreign_keys=[provider_id], back_populates="bookings_as_provider")

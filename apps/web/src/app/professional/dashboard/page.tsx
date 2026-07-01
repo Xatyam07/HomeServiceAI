@@ -146,11 +146,15 @@ function ProfessionalDashboardContent() {
         }
         return next;
       });
-    }, 3000);
+    }, 500);
     return () => clearInterval(interval);
   }, [hasOnTheWay, routePoints]);
 
-  const activeTechCoords = routePoints[techIndex] || startCoords;
+  const activeTechCoords = (hasOnTheWay && routePoints[techIndex])
+    ? routePoints[techIndex]
+    : (user?.profile?.latitude && user?.profile?.longitude)
+      ? [user.profile.latitude, user.profile.longitude] as [number, number]
+      : (routePoints[techIndex] || startCoords);
   const [otpInputs, setOtpInputs] = useState<{[key: string]: string}>({});
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
@@ -275,7 +279,10 @@ function ProfessionalDashboardContent() {
   // Monitor database bookings to pop up real jobs for simulator
   useEffect(() => {
     if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
-      const openJob = dbJobs.find(job => job.status === 'REQUESTED' || job.status === 'ASSIGNED' || job.status === 'ACCEPTED');
+      const openJob = dbJobs.find(job => 
+        (job.status === 'REQUESTED' || job.status === 'ASSIGNED') &&
+        (job.customer_email === '2301641720104@psit.ac.in' || job.provider_id === user.id)
+      );
       if (openJob) {
         if (!incomingJob || incomingJob.id !== openJob.id) {
           setIncomingJob({

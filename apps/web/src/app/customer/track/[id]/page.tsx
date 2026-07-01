@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { 
   MapPin, Clock, MessageSquare, Send, CheckCircle2, Phone, 
-  Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight 
+  Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight, Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
@@ -30,6 +30,57 @@ export default function TrackBooking() {
   const params = useParams();
   const bookingId = params?.id;
   const [bookingDetails, setBookingDetails] = useState<any>(null);
+
+  // Review states
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewClosed, setReviewClosed] = useState(false);
+
+  const handleReviewSubmit = async () => {
+    if (!reviewComment.trim()) {
+      alert("Please write a review comment.");
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: reviewComment
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.is_flagged) {
+          alert(`Review submitted but flagged by AI Reviewer!\nReason: ${data.flag_reason}`);
+        } else {
+          alert(`Review submitted successfully!\nAI Sentiment Score: ${data.ai_sentiment}`);
+        }
+        setReviewClosed(true);
+        // Refresh booking details
+        const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (reloadRes.ok) {
+          setBookingDetails(await reloadRes.json());
+        }
+      } else {
+        const err = await res.json();
+        alert(`Failed to submit review: ${err.detail || err.message}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting review.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   // Timeline status states
   const [currentStatus, setCurrentStatus] = useState<string>('DEPARTED');
@@ -96,7 +147,9 @@ export default function TrackBooking() {
   // Technician tracking simulation variables
   const { theme } = useTheme();
   const startCoords: [number, number] = [17.4600, 78.3600];
-  const destCoords: [number, number] = [17.4485, 78.3741];
+  const destCoords: [number, number] = (bookingDetails?.latitude && bookingDetails?.longitude)
+    ? [bookingDetails.latitude, bookingDetails.longitude]
+    : [17.4485, 78.3741];
 
   const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
   const [techIndex, setTechIndex] = useState(0);
@@ -126,7 +179,7 @@ export default function TrackBooking() {
   useEffect(() => {
     const pts = generateSimulatedRoute(startCoords, destCoords);
     setRoutePoints(pts);
-  }, []);
+  }, [bookingDetails?.latitude, bookingDetails?.longitude]);
 
   useEffect(() => {
     if (routePoints.length === 0 || currentStatus !== 'ON_THE_WAY') return;
@@ -184,12 +237,16 @@ export default function TrackBooking() {
 
         return next;
       });
-    }, 3000);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [routePoints, currentStatus, bookingId, token]);
 
-  const activeTechCoords = routePoints[techIndex] || startCoords;
+  const activeTechCoords = (currentStatus === 'ON_THE_WAY' && routePoints[techIndex])
+    ? routePoints[techIndex]
+    : (bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
+      ? [bookingDetails.tech_latitude, bookingDetails.tech_longitude] as [number, number]
+      : (routePoints[techIndex] || startCoords);
 
   // Job progress simulator (when status is IN_PROGRESS)
   useEffect(() => {
@@ -706,6 +763,79 @@ export default function TrackBooking() {
                 <div className="p-3 bg-indigo-950/20 border border-indigo-900/30 text-indigo-400 rounded-xl text-center font-semibold text-[10px]">
                   Thank you for using HomeSphere AI. Paid via UPI.
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Premium Review/Feedback Modal */}
+      <AnimatePresence>
+        {!reviewClosed && !bookingDetails?.has_review && (currentStatus === 'COMPLETED' || currentStatus === 'PAYMENT_SUCCESSFUL') && bookingDetails?.payment_status === 'PAID' && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-3xl glass-premium p-6 border-white/10 glow-primary shadow-2xl relative text-left"
+            >
+              <div className="flex justify-between items-center pb-3 border-b border-slate-900 mb-4">
+                <div className="flex items-center gap-2">
+                  <Star size={18} className="text-yellow-400 fill-yellow-400 animate-pulse" />
+                  <span className="font-extrabold text-sm tracking-wider uppercase text-slate-200">Rate Your Service Experience</span>
+                </div>
+                <button
+                  onClick={() => setReviewClosed(true)}
+                  className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors text-[10px] font-bold"
+                >
+                  Skip
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <p className="text-xs text-slate-400 leading-relaxed text-center">
+                  Your payment has been successfully verified. Please rate your technician and help us maintain high service standards.
+                </p>
+
+                {/* Star rating selector */}
+                <div className="flex items-center justify-center gap-3 py-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="transition-transform active:scale-90 hover:scale-110"
+                    >
+                      <Star
+                        size={28}
+                        className={
+                          star <= reviewRating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-slate-750"
+                        }
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Share your feedback</label>
+                  <textarea
+                    rows={4}
+                    placeholder="Write a comment about this repair..."
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-slate-900 bg-black/40 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-600"
+                  />
+                </div>
+
+                <button
+                  onClick={handleReviewSubmit}
+                  disabled={submittingReview}
+                  className="w-full py-3 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                >
+                  {submittingReview ? "Submitting to AI Reviewer..." : "Submit Review"}
+                </button>
               </div>
             </motion.div>
           </div>

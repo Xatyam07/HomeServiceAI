@@ -306,7 +306,8 @@ def pay_with_wallet(dto: WalletPayRequest, db: Session = Depends(get_db)):
     
     # Update Booking
     booking.payment_status = "PAID"
-    booking.status = "ACCEPTED"
+    if booking.status not in ["COMPLETED", "PAYMENT_SUCCESSFUL"]:
+        booking.status = "ACCEPTED"
     
     db.commit()
     return {"status": "success", "message": "Booking paid successfully using wallet credits."}

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.schemas import BookingCreate, BookingResponse, BookingStatusUpdate
 from app.models import Booking, User, ProviderProfile, WalletTransaction
 from uuid import UUID
@@ -214,10 +215,17 @@ def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
     return booking
 
 @router.post("/{booking_id}/accept")
-def accept_booking(booking_id: UUID, db: Session = Depends(get_db)):
+def accept_booking(
+    booking_id: UUID, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
+        
+    if current_user.role == "PROVIDER":
+        booking.provider_id = current_user.id
         
     booking.status = "ON_THE_WAY"
     if not booking.otp:
@@ -317,3 +325,48 @@ def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(booking)
     return {"status": "SUCCESS", "message": "Job completion confirmed.", "bookingStatus": booking.status}
+
+class SubmitReviewRequest(BaseModel):
+    rating: int
+    comment: str
+
+@router.post("/{booking_id}/review")
+def submit_booking_review(booking_id: UUID, req: SubmitReviewRequest, db: Session = Depends(get_db)):
+    from app.models import Review
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+        
+    existing = db.query(Review).filter(Review.booking_id == booking_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Review already submitted for this booking.")
+        
+    from app.routers.reviewer import analyze_review, ReviewAnalysisRequest
+    analysis = analyze_review(ReviewAnalysisRequest(review_text=req.comment, rating=req.rating))
+    
+    review = Review(
+        booking_id=booking_id,
+        customer_id=booking.customer_id,
+        provider_id=booking.provider_id,
+        rating=req.rating,
+        comment=req.comment,
+        is_flagged=analysis.is_flagged,
+        ai_sentiment=analysis.sentiment_score
+    )
+    db.add(review)
+    
+    if booking.provider_id:
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == booking.provider_id).first()
+        if profile:
+            all_ratings = db.query(Review.rating).filter(Review.provider_id == booking.provider_id).all()
+            ratings_list = [r[0] for r in all_ratings] + [req.rating]
+            profile.rating = round(sum(ratings_list) / len(ratings_list), 2)
+            
+    db.commit()
+    return {
+        "status": "SUCCESS", 
+        "message": "Review submitted and analyzed successfully.", 
+        "is_flagged": review.is_flagged,
+        "ai_sentiment": review.ai_sentiment,
+        "flag_reason": analysis.reason
+    }

@@ -40,6 +40,8 @@ class ProviderProfileResponse(BaseModel):
     city: Optional[str] = None
     skills: Optional[str] = None
     bio: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -94,10 +96,15 @@ class BookingResponse(BaseModel):
     material_cost: float
     total_cost: float
     address: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     tech_latitude: Optional[float]
     tech_longitude: Optional[float]
     eta_minutes: Optional[int]
     payment_status: str
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    has_review: bool = False
     created_at: datetime
 
     class Config:
