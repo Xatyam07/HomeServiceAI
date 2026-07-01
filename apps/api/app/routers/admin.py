@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, ProviderProfile, Booking, Review, PaymentRecord
+from app.models import User, ProviderProfile, Booking, Review, PaymentRecord, WalletTransaction
 from uuid import UUID
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -182,6 +182,15 @@ def list_workers(
     results = []
     for w in workers:
         profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == w.id).first()
+        
+        # Calculate real wallet balance from transactions
+        txs = db.query(WalletTransaction).filter(WalletTransaction.user_id == w.id).all()
+        w_balance = max(
+            sum(t.amount for t in txs if t.type == "CREDIT") - 
+            sum(t.amount for t in txs if t.type == "DEBIT"),
+            0.0
+        )
+        
         results.append({
             "id": str(w.id),
             "name": w.name,
@@ -191,7 +200,7 @@ def list_workers(
             "profilePhoto": w.profile_photo or f"https://api.dicebear.com/7.x/adventurer/svg?seed={w.name.replace(' ', '')}",
             "category": profile.category if profile else "Unspecified",
             "experienceYrs": profile.experience_yrs if profile else 0,
-            "walletBalance": profile.wallet_balance if profile else 0.0,
+            "walletBalance": round(w_balance, 2),
             "hourlyRate": profile.hourly_rate if profile else 300.0,
             "isAvailable": profile.is_available if profile else False,
             "rating": profile.rating if profile else 5.0,
@@ -260,7 +269,20 @@ def edit_worker_profile(
     if payload.rating is not None: profile.rating = payload.rating
     if payload.latitude is not None: profile.latitude = payload.latitude
     if payload.longitude is not None: profile.longitude = payload.longitude
-    if payload.wallet_balance is not None: profile.wallet_balance = payload.wallet_balance
+    if payload.wallet_balance is not None:
+        # Calculate current balance from transactions
+        txs = db.query(WalletTransaction).filter(WalletTransaction.user_id == worker.id).all()
+        current_balance = sum(t.amount for t in txs if t.type == "CREDIT") - sum(t.amount for t in txs if t.type == "DEBIT")
+        diff = payload.wallet_balance - current_balance
+        if diff != 0:
+            tx_type = "CREDIT" if diff > 0 else "DEBIT"
+            new_tx = WalletTransaction(
+                user_id=worker.id,
+                amount=abs(diff),
+                type=tx_type,
+                reference="Admin Balance Adjustment"
+            )
+            db.add(new_tx)
             
     db.commit()
     return {"status": "SUCCESS", "message": "Worker profile updated by administrator."}

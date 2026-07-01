@@ -96,7 +96,6 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
                     is_verified=True,
                     is_available=True,
                     rating=4.8,
-                    wallet_balance=500.0,
                     latitude=17.4485,
                     longitude=78.3741
                 )
@@ -220,7 +219,6 @@ def switch_category(
             is_verified=True,
             is_available=True,
             rating=4.8,
-            wallet_balance=500.0,
             latitude=17.4485,
             longitude=78.3741
         )
