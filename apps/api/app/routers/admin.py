@@ -163,7 +163,7 @@ def list_workers(
     category: str = Query(None),
     status_filter: str = Query(None),
     search: str = Query(None),
-    limit: int = Query(25),
+    limit: int = Query(None),
     offset: int = Query(0),
     sort_by: str = Query("newest"),
     sort_order: str = Query("desc"),
@@ -217,7 +217,10 @@ def list_workers(
     total_count = query.count()
     
     # Paginated results
-    workers = query.offset(offset).limit(limit).all()
+    if limit is not None:
+        workers = query.offset(offset).limit(limit).all()
+    else:
+        workers = query.offset(offset).all()
     worker_ids = [w.id for w, _ in workers]
 
     # Batch load WalletTransaction
@@ -282,6 +285,8 @@ def list_workers(
             }
         })
         
+    if limit is None:
+        return results
     return {
         "total_count": total_count,
         "workers": results
