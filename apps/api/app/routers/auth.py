@@ -74,12 +74,33 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
         # Update login details and sync firebase_uid
         db_user.last_login = datetime.utcnow()
         db_user.firebase_uid = uid
+        if db_user.email != email:
+            db_user.email = email
         if email == "9369022460sa@gmail.com" and db_user.role != "SUPER_ADMIN":
             db_user.role = "SUPER_ADMIN"
+            db_user.status = "ACTIVE"
         if email == "xatyammishra07@gmail.com" and db_user.role != "PROVIDER":
             db_user.role = "PROVIDER"
+            db_user.status = "APPROVED"
         if picture:
             db_user.profile_photo = picture
+        
+        # Ensure provider profile is initialized
+        if db_user.role == "PROVIDER":
+            existing_profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == db_user.id).first()
+            if not existing_profile:
+                profile = ProviderProfile(
+                    user_id=db_user.id,
+                    category="Plumber",
+                    experience_yrs=5,
+                    is_verified=True,
+                    is_available=True,
+                    rating=4.8,
+                    wallet_balance=500.0,
+                    latitude=17.4485,
+                    longitude=78.3741
+                )
+                db.add(profile)
         db.commit()
         db.refresh(db_user)
 
