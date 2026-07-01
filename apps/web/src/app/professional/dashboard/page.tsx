@@ -13,7 +13,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 
 function ProfessionalDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const { user, logout, token } = useAuth();
+  const { user, logout, token, refreshUserProfile } = useAuth();
   
   // Testing mode states for multi-skill professional
   const [switching, setSwitching] = useState(false);
@@ -37,8 +37,11 @@ function ProfessionalDashboardContent() {
       });
       if (res.ok) {
         setSelectedTestingCategory(cat);
+        if (user && user.profile) {
+          user.profile.category = cat;
+        }
+        await refreshUserProfile();
         alert(`Switched test category to ${cat}!`);
-        window.location.reload();
       } else {
         const data = await res.json();
         alert(`Failed to switch: ${data.detail}`);

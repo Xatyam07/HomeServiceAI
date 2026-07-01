@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, ProviderProfile, Booking, Review, PaymentRecord
 from uuid import UUID
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from app.dependencies import require_admin
+from pydantic import BaseModel
+import random
 
 router = APIRouter()
 
@@ -157,6 +159,8 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
 @router.get("/workers", response_model=List[Dict[str, Any]])
 def list_workers(
     status_filter: str = Query(None), # PENDING, APPROVED, SUSPENDED
+    city: str = Query(None),
+    category: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
@@ -166,6 +170,13 @@ def list_workers(
             query = query.filter(User.status.in_(["PENDING", "PENDING_APPROVAL"]))
         else:
             query = query.filter(User.status == status_filter)
+            
+    if city or category:
+        query = query.join(ProviderProfile, User.id == ProviderProfile.user_id)
+        if city:
+            query = query.filter(ProviderProfile.city.ilike(f"%{city}%"))
+        if category:
+            query = query.filter(ProviderProfile.category.ilike(f"%{category}%"))
     
     workers = query.all()
     results = []
@@ -177,8 +188,18 @@ def list_workers(
             "email": w.email,
             "phone": w.phone,
             "status": w.status,
+            "profilePhoto": w.profile_photo or f"https://api.dicebear.com/7.x/adventurer/svg?seed={w.name.replace(' ', '')}",
             "category": profile.category if profile else "Unspecified",
             "experienceYrs": profile.experience_yrs if profile else 0,
+            "walletBalance": profile.wallet_balance if profile else 0.0,
+            "hourlyRate": profile.hourly_rate if profile else 300.0,
+            "isAvailable": profile.is_available if profile else False,
+            "rating": profile.rating if profile else 5.0,
+            "latitude": profile.latitude if profile else 0.0,
+            "longitude": profile.longitude if profile else 0.0,
+            "city": profile.city if profile else "",
+            "skills": profile.skills if profile else "",
+            "bio": profile.bio if profile else "",
             "docs": {
                 "aadhaar": profile.aadhaar_url if profile else None,
                 "selfie": profile.selfie_url if profile else None,
@@ -186,6 +207,63 @@ def list_workers(
             }
         })
     return results
+
+class AdminWorkerEditSchema(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    profile_photo: Optional[str] = None
+    category: Optional[str] = None
+    experience_yrs: Optional[int] = None
+    hourly_rate: Optional[float] = None
+    skills: Optional[str] = None
+    bio: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    is_available: Optional[bool] = None
+    rating: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    wallet_balance: Optional[float] = None
+
+@router.put("/workers/{worker_id}/edit-profile")
+def edit_worker_profile(
+    worker_id: UUID, 
+    payload: AdminWorkerEditSchema, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_admin)
+):
+    user = db.query(User).filter(User.id == worker_id, User.role == "PROVIDER").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Professional not found.")
+        
+    if payload.name is not None: user.name = payload.name
+    if payload.email is not None: user.email = payload.email
+    if payload.phone is not None: user.phone = payload.phone
+    if payload.status is not None: user.status = payload.status
+    if payload.profile_photo is not None: user.profile_photo = payload.profile_photo
+    
+    profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == worker_id).first()
+    if not profile:
+        profile = ProviderProfile(user_id=worker_id)
+        db.add(profile)
+        
+    if payload.category is not None: profile.category = payload.category
+    if payload.experience_yrs is not None: profile.experience_yrs = payload.experience_yrs
+    if payload.hourly_rate is not None: profile.hourly_rate = payload.hourly_rate
+    if payload.skills is not None: profile.skills = payload.skills
+    if payload.bio is not None: profile.bio = payload.bio
+    if payload.address is not None: profile.address = payload.address
+    if payload.city is not None: profile.city = payload.city
+    if payload.is_available is not None: profile.is_available = payload.is_available
+    if payload.rating is not None: profile.rating = payload.rating
+    if payload.latitude is not None: profile.latitude = payload.latitude
+    if payload.longitude is not None: profile.longitude = payload.longitude
+    if payload.wallet_balance is not None: profile.wallet_balance = payload.wallet_balance
+            
+    db.commit()
+    return {"status": "SUCCESS", "message": "Worker profile updated by administrator."}
 
 # 3. Approve Worker
 @router.put("/workers/{worker_id}/approve")

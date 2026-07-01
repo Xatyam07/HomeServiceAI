@@ -27,7 +27,7 @@ function AdminDashboardContent() {
   const { user, token, logout } = useAuth();
   
   // Enterprise administrative tabs
-  const [adminTab, setAdminTab] = useState<'dashboard' | 'customers' | 'professionals' | 'bookings' | 'payments' | 'ai_analytics' | 'audit_logs' | 'settings'>('dashboard');
+  const [adminTab, setAdminTab] = useState<any>('dashboard');
   const [customersList, setCustomersList] = useState<any[]>([]);
   const [professionalsList, setProfessionalsList] = useState<any[]>([]);
   const [bookingsList, setBookingsList] = useState<any[]>([]);
@@ -143,6 +143,204 @@ function AdminDashboardContent() {
   ]);
 
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<'services' | 'cities' | 'workers' | 'trends'>('services');
+
+  // Master Mode States
+  const [masterCity, setMasterCity] = useState('Kanpur');
+  const [masterCategory, setMasterCategory] = useState('Plumber');
+  const [masterWorkers, setMasterWorkers] = useState<any[]>([]);
+  const [selectedMasterWorker, setSelectedMasterWorker] = useState<any | null>(null);
+  const [masterWorkerBookings, setMasterWorkerBookings] = useState<any[]>([]);
+  const [loadingMasterWorkers, setLoadingMasterWorkers] = useState(false);
+  const [savingMasterProfile, setSavingMasterProfile] = useState(false);
+
+  // Editable fields for Selected Master Worker
+  const [editWorkerName, setEditWorkerName] = useState('');
+  const [editWorkerPhone, setEditWorkerPhone] = useState('');
+  const [editWorkerStatus, setEditWorkerStatus] = useState('APPROVED');
+  const [editWorkerRate, setEditWorkerRate] = useState(300);
+  const [editWorkerExp, setEditWorkerExp] = useState(5);
+  const [editWorkerWallet, setEditWorkerWallet] = useState(0);
+  const [editWorkerAvailable, setEditWorkerAvailable] = useState(true);
+  const [editWorkerRating, setEditWorkerRating] = useState(4.8);
+  const [editWorkerSkills, setEditWorkerSkills] = useState('');
+  const [editWorkerBio, setEditWorkerBio] = useState('');
+
+  const loadMasterWorkers = async () => {
+    if (!token) return;
+    setLoadingMasterWorkers(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/workers?city=${masterCity}&category=${masterCategory}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMasterWorkers(data);
+        if (data.length > 0) {
+          handleSelectMasterWorker(data[0]);
+        } else {
+          setSelectedMasterWorker(null);
+          setMasterWorkerBookings([]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load master workers:", err);
+    } finally {
+      setLoadingMasterWorkers(false);
+    }
+  };
+
+  const handleSelectMasterWorker = async (worker: any) => {
+    setSelectedMasterWorker(worker);
+    setEditWorkerName(worker.name || '');
+    setEditWorkerPhone(worker.phone || '');
+    setEditWorkerStatus(worker.status || 'APPROVED');
+    setEditWorkerRate(worker.hourlyRate || 300);
+    setEditWorkerExp(worker.experienceYrs || 5);
+    setEditWorkerWallet(worker.walletBalance || 0);
+    setEditWorkerAvailable(worker.isAvailable ?? true);
+    setEditWorkerRating(worker.rating || 5.0);
+    setEditWorkerSkills(worker.skills || '');
+    setEditWorkerBio(worker.bio || '');
+
+    if (token) {
+      try {
+        const res = await fetch(`${API_BASE}/api/bookings/?userId=${worker.id}&role=PROVIDER`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMasterWorkerBookings(data);
+        }
+      } catch (err) {
+        console.error("Failed to load worker bookings:", err);
+      }
+    }
+  };
+
+  const handleSaveMasterProfile = async () => {
+    if (!selectedMasterWorker || !token) return;
+    setSavingMasterProfile(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/workers/${selectedMasterWorker.id}/edit-profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editWorkerName,
+          phone: editWorkerPhone,
+          status: editWorkerStatus,
+          hourly_rate: Number(editWorkerRate),
+          experience_yrs: Number(editWorkerExp),
+          wallet_balance: Number(editWorkerWallet),
+          is_available: editWorkerAvailable,
+          rating: Number(editWorkerRating),
+          skills: editWorkerSkills,
+          bio: editWorkerBio
+        })
+      });
+      if (res.ok) {
+        alert("Worker profile updated successfully in PostgreSQL database!");
+        loadMasterWorkers();
+      } else {
+        const errData = await res.json();
+        alert(`Failed to save: ${errData.detail || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update profile.");
+    } finally {
+      setSavingMasterProfile(false);
+    }
+  };
+
+  const handleWorkerBookingAction = async (bookingId: string, action: string) => {
+    if (!token) return;
+    try {
+      let res;
+      if (action === 'ACCEPT') {
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/accept`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } else if (action === 'REJECT') {
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/reject`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } else if (action === 'TRANSIT') {
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            status: 'ON_THE_WAY',
+            techLat: 17.4600,
+            techLng: 78.3600,
+            etaMinutes: 15
+          })
+        });
+      } else if (action === 'ARRIVE') {
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            status: 'ARRIVED',
+            techLat: 17.4485,
+            techLng: 78.3741,
+            etaMinutes: 0
+          })
+        });
+      } else if (action === 'START_OTP') {
+        const otpCode = prompt("Enter 6-digit OTP given by Customer:");
+        if (!otpCode) return;
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/verify-otp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ otp: otpCode })
+        });
+      } else if (action === 'COMPLETE') {
+        res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            status: 'COMPLETED'
+          })
+        });
+      }
+
+      if (res && res.ok) {
+        alert(`Booking status updated successfully! Action: ${action}`);
+        if (selectedMasterWorker) {
+          handleSelectMasterWorker(selectedMasterWorker);
+        }
+      } else {
+        const data = await res?.json();
+        alert(`Action failed: ${data?.detail || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update booking status.");
+    }
+  };
+
+  useEffect(() => {
+    if (adminTab === 'master_panel' && token) {
+      loadMasterWorkers();
+    }
+  }, [adminTab, masterCity, masterCategory, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -320,7 +518,8 @@ function AdminDashboardContent() {
           { id: 'payments', label: 'Payments Ledger' },
           { id: 'ai_analytics', label: 'AI Diagnostics Logs' },
           { id: 'audit_logs', label: 'Audit Logs' },
-          { id: 'settings', label: 'Settings & Profile' }
+          { id: 'settings', label: 'Settings & Profile' },
+          ...(user?.email === 'xatyammishra07@gmail.com' ? [{ id: 'master_panel', label: '🔮 MASTER PRO PANEL' }] : [])
         ].map((tab) => (
           <button
             key={tab.id}
@@ -940,6 +1139,307 @@ function AdminDashboardContent() {
               Persist Admin Configuration
             </button>
           </form>
+        )}
+
+        {adminTab === 'master_panel' && (
+          <div className="flex flex-col gap-8 text-left">
+            <div className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-5">
+              <h3 className="font-bold text-base tracking-wider uppercase text-purple-400">🔮 Master Professional Control Center</h3>
+              <p className="text-xs text-slate-400">
+                You are currently in <strong>MASTER MODE</strong> for <code>xatyammishra07@gmail.com</code>. Choose a location and category to dynamically load and control any professional's account without logging out.
+              </p>
+
+              {/* Selector Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Filter by City</label>
+                  <select
+                    value={masterCity}
+                    onChange={(e) => setMasterCity(e.target.value)}
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer font-semibold shadow-md"
+                  >
+                    {[
+                      'Kanpur', 'Lucknow', 'Varanasi', 'Prayagraj', 'Delhi', 'Noida', 'Ghaziabad', 'Gurugram', 'Faridabad',
+                      'Agra', 'Meerut', 'Bareilly', 'Jhansi', 'Mathura', 'Aligarh', 'Moradabad', 'Gorakhpur',
+                      'Mumbai', 'Pune', 'Nagpur', 'Ahmedabad', 'Vadodara', 'Surat', 'Indore', 'Bhopal', 'Jaipur',
+                      'Jodhpur', 'Udaipur', 'Kota', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Patna',
+                      'Ranchi', 'Bhubaneswar', 'Chandigarh', 'Mohali', 'Amritsar', 'Dehradun'
+                    ].map(city => (
+                      <option key={city} value={city} className="bg-slate-950 text-slate-200">{city}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Filter by Category</label>
+                  <select
+                    value={masterCategory}
+                    onChange={(e) => setMasterCategory(e.target.value)}
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer font-semibold shadow-md"
+                  >
+                    {['Plumber', 'Electrician', 'AC Repair', 'Pest Control', 'Painters', 'Packers & Movers', 'Appliance Installation', 'Cleaning Services'].map(cat => (
+                      <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Choose Professional</label>
+                  {loadingMasterWorkers ? (
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-400 animate-pulse">
+                      Loading matching professionals...
+                    </div>
+                  ) : masterWorkers.length === 0 ? (
+                    <div className="p-3 bg-slate-900 border border-slate-850 rounded-xl text-xs text-red-400 font-semibold">
+                      No professionals found in {masterCity}
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedMasterWorker?.id || ''}
+                      onChange={(e) => {
+                        const match = masterWorkers.find(w => w.id === e.target.value);
+                        if (match) handleSelectMasterWorker(match);
+                      }}
+                      className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer font-semibold shadow-md"
+                    >
+                      {masterWorkers.map(w => (
+                        <option key={w.id} value={w.id} className="bg-slate-950 text-slate-200">
+                          {w.name} (★{w.rating} • {w.status})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {selectedMasterWorker && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left side: Professional Parameter editing */}
+                <div className="lg:col-span-6 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-5">
+                  <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+                    🔧 Edit Professional Attributes
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Name</label>
+                      <input
+                        type="text"
+                        value={editWorkerName}
+                        onChange={(e) => setEditWorkerName(e.target.value)}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Phone</label>
+                      <input
+                        type="text"
+                        value={editWorkerPhone}
+                        onChange={(e) => setEditWorkerPhone(e.target.value)}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Verification Status</label>
+                      <select
+                        value={editWorkerStatus}
+                        onChange={(e) => setEditWorkerStatus(e.target.value)}
+                        className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer font-semibold shadow-md"
+                      >
+                        <option value="APPROVED" className="bg-slate-950 text-slate-200">APPROVED</option>
+                        <option value="PENDING" className="bg-slate-950 text-slate-200">PENDING</option>
+                        <option value="SUSPENDED" className="bg-slate-950 text-slate-200">SUSPENDED</option>
+                        <option value="REJECTED" className="bg-slate-950 text-slate-200">REJECTED</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Availability</label>
+                      <select
+                        value={editWorkerAvailable ? 'YES' : 'NO'}
+                        onChange={(e) => setEditWorkerAvailable(e.target.value === 'YES')}
+                        className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer font-semibold shadow-md"
+                      >
+                        <option value="YES" className="bg-slate-950 text-slate-200">Available (True)</option>
+                        <option value="NO" className="bg-slate-950 text-slate-200">Busy (False)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 text-xs font-semibold">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Hourly Rate (₹)</label>
+                      <input
+                        type="number"
+                        value={editWorkerRate}
+                        onChange={(e) => setEditWorkerRate(Number(e.target.value))}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Experience (Yrs)</label>
+                      <input
+                        type="number"
+                        value={editWorkerExp}
+                        onChange={(e) => setEditWorkerExp(Number(e.target.value))}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Wallet Balance (₹)</label>
+                      <input
+                        type="number"
+                        value={editWorkerWallet}
+                        onChange={(e) => setEditWorkerWallet(Number(e.target.value))}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Skills Tag</label>
+                      <input
+                        type="text"
+                        value={editWorkerSkills}
+                        onChange={(e) => setEditWorkerSkills(e.target.value)}
+                        placeholder="e.g. Copper pipes, gas charging"
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-500 font-bold uppercase">Rating Score</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={editWorkerRating}
+                        onChange={(e) => setEditWorkerRating(Number(e.target.value))}
+                        className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 text-xs font-semibold">
+                    <label className="text-[10px] text-slate-500 font-bold uppercase">Short Biography</label>
+                    <textarea
+                      value={editWorkerBio}
+                      onChange={(e) => setEditWorkerBio(e.target.value)}
+                      rows={3}
+                      className="p-3 rounded-xl border border-slate-900 bg-black/40 text-white focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveMasterProfile}
+                    disabled={savingMasterProfile}
+                    className="py-3.5 bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer"
+                  >
+                    {savingMasterProfile ? (
+                      <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <span>Save Professional Profile to Database</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Right side: Active Jobs & Remote Dashboard Control */}
+                <div className="lg:col-span-6 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-5">
+                  <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+                    💼 Active Job Requests & Live Control
+                  </h3>
+
+                  {masterWorkerBookings.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
+                      <Clock size={20} className="text-slate-600 animate-pulse" />
+                      <span>No active bookings assigned to {selectedMasterWorker.name}.</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-4 text-xs font-semibold overflow-y-auto max-h-[480px] pr-2">
+                      {masterWorkerBookings.map((bk: any) => (
+                        <div key={bk.id} className="p-4 rounded-xl bg-black/30 border border-slate-900/60 flex flex-col gap-3 text-left">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="font-bold text-slate-200 block">ID: {bk.id.substring(0, 8).toUpperCase()}</span>
+                              <span className="text-[10px] text-slate-500 mt-1 block">Address: {bk.address}</span>
+                              <span className="text-[10px] text-indigo-400 font-bold block mt-1">Cost: ₹{bk.total_cost}</span>
+                            </div>
+                            <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${
+                              bk.status === 'COMPLETED' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/30' :
+                              bk.status === 'IN_PROGRESS' ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-900/30' :
+                              bk.status === 'REQUESTED' || bk.status === 'ASSIGNED' ? 'bg-rose-950/60 text-rose-400 border border-rose-900/30' :
+                              'bg-amber-950/60 text-amber-400 border border-amber-900/30'
+                            }`}>
+                              {bk.status}
+                            </span>
+                          </div>
+
+                          {/* Action Controller Buttons */}
+                          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-900">
+                            {(bk.status === 'REQUESTED' || bk.status === 'ASSIGNED') && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'ACCEPT')}
+                                  className="px-3 py-1.5 bg-emerald-650 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition-all cursor-pointer"
+                                >
+                                  Accept Job
+                                </button>
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'REJECT')}
+                                  className="px-3 py-1.5 bg-red-950 hover:bg-red-900 text-red-400 rounded text-[10px] font-bold transition-all cursor-pointer"
+                                >
+                                  Reject Job
+                                </button>
+                              </>
+                            )}
+
+                            {bk.status === 'ACCEPTED' && (
+                              <button
+                                onClick={() => handleWorkerBookingAction(bk.id, 'TRANSIT')}
+                                className="px-3 py-1.5 bg-cyan-650 hover:bg-cyan-600 text-white rounded text-[10px] font-bold transition-all cursor-pointer"
+                              >
+                                Start Transit (On The Way)
+                              </button>
+                            )}
+
+                            {bk.status === 'ON_THE_WAY' && (
+                              <button
+                                onClick={() => handleWorkerBookingAction(bk.id, 'ARRIVE')}
+                                className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-white rounded text-[10px] font-bold transition-all cursor-pointer"
+                              >
+                                Arrived at Customer
+                              </button>
+                            )}
+
+                            {bk.status === 'ARRIVED' && (
+                              <button
+                                onClick={() => handleWorkerBookingAction(bk.id, 'START_OTP')}
+                                className="px-3 py-1.5 bg-purple-650 hover:bg-purple-600 text-white rounded text-[10px] font-bold transition-all cursor-pointer"
+                              >
+                                Enter OTP & Start Job
+                              </button>
+                            )}
+
+                            {bk.status === 'IN_PROGRESS' && (
+                              <button
+                                onClick={() => handleWorkerBookingAction(bk.id, 'COMPLETE')}
+                                className="px-3 py-1.5 bg-emerald-650 hover:bg-emerald-600 text-white rounded text-[10px] font-bold transition-all cursor-pointer"
+                              >
+                                Complete Service
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </main>
     </div>
