@@ -433,9 +433,12 @@ def list_all_bookings(db: Session = Depends(get_db), current_user: User = Depend
             "id": str(b.id),
             "customer_name": cust.name if cust else "Unknown Customer",
             "provider_name": prov.name if prov else "Unassigned",
+            "provider_email": prov.email if prov else "",
             "service_type": b.service_type,
             "status": b.status,
             "total_cost": b.total_cost,
+            "address": b.address,
+            "otp": b.otp,
             "scheduled_time": b.scheduled_time.isoformat() if b.scheduled_time else None,
             "created_at": b.created_at.isoformat()
         })

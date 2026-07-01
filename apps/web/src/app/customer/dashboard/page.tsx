@@ -563,7 +563,12 @@ function DashboardContent() {
         router.push(`/customer/track/${booking.id}`);
       }
     } catch (err: any) {
-      alert(`Payment / Booking failed: ${err.message}`);
+      console.error("Payment failure:", err);
+      if (err.message === "Failed to fetch" && typeof window !== "undefined" && window.location.protocol === "https:" && API_BASE.includes("localhost")) {
+        alert(`Payment / Booking failed: Blocked by Browser (Mixed Content). You are accessing HomeSphere via HTTPS (Vercel), but the API URL is set to local HTTP (${API_BASE}). To resolve this, run the backend server locally and access the site via http://localhost:3000, or deploy a secure HTTPS backend API.`);
+      } else {
+        alert(`Payment / Booking failed: ${err.message}`);
+      }
       setIsPaying(false);
     }
   };

@@ -278,9 +278,9 @@ def seed_data(db: Session):
                     used_phones.add(phone)
                     break
             
-            # Profile Photo
-            photo_gender = "women" if is_female else "men"
-            photo_url = f"https://randomuser.me/api/portraits/{photo_gender}/{provider_idx % 99}.jpg"
+            # Profile Photo (Dicebear Adventurer SVG Animated)
+            clean_name = name.replace(" ", "")
+            photo_url = f"https://api.dicebear.com/7.x/adventurer/svg?seed={clean_name}"
 
             user_obj = User(
                 id=p_id,

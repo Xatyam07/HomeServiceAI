@@ -24,7 +24,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 
 function AdminDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, refreshUserProfile } = useAuth();
   
   // Enterprise administrative tabs
   const [adminTab, setAdminTab] = useState<any>('dashboard');
@@ -144,9 +144,69 @@ function AdminDashboardContent() {
 
   const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<'services' | 'cities' | 'workers' | 'trends'>('services');
 
+  // Admin Profile Photo States
+  const [adminPhoto, setAdminPhoto] = useState('');
+  useEffect(() => {
+    if (user?.profile_photo) {
+      setAdminPhoto(user.profile_photo);
+    }
+  }, [user]);
+
+  const handleAdminPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/uploads/`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const data = await response.json();
+      setAdminPhoto(data.url);
+      alert("Admin photo uploaded successfully! Click 'Persist Admin Configuration' to save.");
+    } catch (err) {
+      console.error(err);
+      alert("Upload failed.");
+    }
+  };
+
+  const handleSaveAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register-profile`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email: user?.email,
+          name: user?.name || "System Administrator",
+          role: "ADMIN",
+          profile_photo: adminPhoto
+        })
+      });
+      if (res.ok) {
+        await refreshUserProfile();
+        alert("Admin profile photo saved successfully!");
+      } else {
+        alert("Failed to save admin profile photo.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save admin profile photo.");
+    }
+  };
+
   // Master Mode States
   const [masterCity, setMasterCity] = useState('Kanpur');
   const [masterCategory, setMasterCategory] = useState('Plumber');
+  const [filterCity, setFilterCity] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [masterWorkers, setMasterWorkers] = useState<any[]>([]);
   const [selectedMasterWorker, setSelectedMasterWorker] = useState<any | null>(null);
   const [masterWorkerBookings, setMasterWorkerBookings] = useState<any[]>([]);
@@ -341,6 +401,24 @@ function AdminDashboardContent() {
       loadMasterWorkers();
     }
   }, [adminTab, masterCity, masterCategory, token]);
+
+  useEffect(() => {
+    if (adminTab === 'professionals' && token) {
+      const fetchFiltered = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/admin/workers?city=${filterCity}&category=${filterCategory}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            setProfessionalsList(await res.json());
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchFiltered();
+    }
+  }, [adminTab, filterCity, filterCategory, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -862,9 +940,48 @@ function AdminDashboardContent() {
         {adminTab === 'professionals' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
             <div className="lg:col-span-7 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Professional Registrations</h3>
-                <span className="text-[10px] text-slate-500 font-bold uppercase">{professionalsList.length} Total</span>
+              <div className="flex flex-col gap-3 pb-3 border-b border-slate-900">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Professional Registrations</h3>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase">{professionalsList.length} Total</span>
+                </div>
+                
+                {/* Directory Filters */}
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Filter by City</label>
+                    <select
+                      value={filterCity}
+                      onChange={(e) => setFilterCity(e.target.value)}
+                      className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-[11px] focus:outline-none cursor-pointer font-semibold shadow-md"
+                    >
+                      <option value="" className="bg-slate-950 text-slate-400">All Cities</option>
+                      {[
+                        'Kanpur', 'Lucknow', 'Varanasi', 'Prayagraj', 'Delhi', 'Noida', 'Ghaziabad', 'Gurugram', 'Faridabad',
+                        'Agra', 'Meerut', 'Bareilly', 'Jhansi', 'Mathura', 'Aligarh', 'Moradabad', 'Gorakhpur',
+                        'Mumbai', 'Pune', 'Nagpur', 'Ahmedabad', 'Vadodara', 'Surat', 'Indore', 'Bhopal', 'Jaipur',
+                        'Jodhpur', 'Udaipur', 'Kota', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Patna',
+                        'Ranchi', 'Bhubaneswar', 'Chandigarh', 'Mohali', 'Amritsar', 'Dehradun'
+                      ].map(city => (
+                        <option key={city} value={city} className="bg-slate-950 text-slate-200">{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Filter by Category</label>
+                    <select
+                      value={filterCategory}
+                      onChange={(e) => setFilterCategory(e.target.value)}
+                      className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-[11px] focus:outline-none cursor-pointer font-semibold shadow-md"
+                    >
+                      <option value="" className="bg-slate-950 text-slate-400">All Categories</option>
+                      {['Plumber', 'Electrician', 'AC Repair', 'Pest Control', 'Painters', 'Packers & Movers', 'Appliance Installation', 'Cleaning Services'].map(cat => (
+                        <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 text-xs">
@@ -1084,8 +1201,28 @@ function AdminDashboardContent() {
         )}
 
         {adminTab === 'settings' && (
-          <form onSubmit={(e) => { e.preventDefault(); alert("Admin profile settings saved to PostgreSQL!"); }} className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-6 text-left max-w-2xl mx-auto text-xs">
+          <form onSubmit={handleSaveAdminProfile} className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-6 text-left max-w-2xl mx-auto text-xs">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">Edit Administrative Profile</h3>
+            
+            {/* Admin Avatar Upload */}
+            <div className="flex items-center gap-4 border-b border-slate-900 pb-4">
+              <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center relative">
+                {adminPhoto ? (
+                  <img src={adminPhoto} alt="Admin profile" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-extrabold text-sm text-purple-400">ADMIN</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1 text-left">
+                <span className="font-bold text-xs text-slate-200">Administrative Avatar Photo</span>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleAdminPhotoUpload}
+                  className="text-[10px] text-slate-550 file:mr-3 file:py-1.5 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-purple-950/60 file:text-purple-400 hover:file:bg-purple-900 cursor-pointer"
+                />
+              </div>
+            </div>
             
             <div className="grid grid-cols-2 gap-4 font-semibold">
               <div className="flex flex-col gap-2">
@@ -1139,6 +1276,127 @@ function AdminDashboardContent() {
               Persist Admin Configuration
             </button>
           </form>
+        )}
+
+        {adminTab === 'dummy_bookings' && (
+          <div className="flex flex-col gap-6 text-left">
+            <div className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                <div>
+                  <h3 className="font-bold text-sm tracking-wider uppercase text-purple-400">Live Dummy Professional Bookings</h3>
+                  <span className="text-[10px] text-slate-500 mt-1 block">Live bookings dispatched by original customers to simulated dummy professionals.</span>
+                </div>
+                <span className="text-xs bg-purple-950/60 text-purple-450 border border-purple-900/30 px-2 py-0.5 rounded font-bold">
+                  {bookingsList.filter(b => b.provider_email && b.provider_email.endsWith('@homesphere.com')).length} Active
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-slate-300 font-semibold border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-500 uppercase text-[9px] tracking-wider font-bold">
+                      <th className="py-3 px-2">Booking ID</th>
+                      <th className="py-3 px-2">Customer Name</th>
+                      <th className="py-3 px-2">Assigned Dummy Pro</th>
+                      <th className="py-3 px-2">Service</th>
+                      <th className="py-3 px-2">Total Bill</th>
+                      <th className="py-3 px-2">Status</th>
+                      <th className="py-3 px-2">Verification OTP</th>
+                      <th className="py-3 px-2">Address</th>
+                      <th className="py-3 px-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookingsList.filter(b => b.provider_email && b.provider_email.endsWith('@homesphere.com')).length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-500 font-medium">
+                          No active bookings currently assigned to dummy marketplace professionals.
+                        </td>
+                      </tr>
+                    ) : (
+                      bookingsList.filter(b => b.provider_email && b.provider_email.endsWith('@homesphere.com')).map((bk) => (
+                        <tr key={bk.id} className="border-b border-slate-900 hover:bg-black/10 transition-colors">
+                          <td className="py-3.5 px-2 font-mono text-[10px] text-purple-400 font-bold">{bk.id.substring(0, 8).toUpperCase()}</td>
+                          <td className="py-3.5 px-2">{bk.customer_name}</td>
+                          <td className="py-3.5 px-2 text-indigo-400 font-bold">{bk.provider_name}</td>
+                          <td className="py-3.5 px-2">{bk.service_type}</td>
+                          <td className="py-3.5 px-2 text-cyan-400 font-bold">₹{bk.total_cost}</td>
+                          <td className="py-3.5 px-2">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              bk.status === 'COMPLETED' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/30' :
+                              bk.status === 'IN_PROGRESS' ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-900/30' :
+                              bk.status === 'REQUESTED' || bk.status === 'ASSIGNED' ? 'bg-rose-950/60 text-rose-400 border border-rose-900/30' :
+                              'bg-amber-950/60 text-amber-400 border border-amber-900/30'
+                            }`}>
+                              {bk.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-2 font-mono font-bold text-amber-400">{bk.otp || "None"}</td>
+                          <td className="py-3.5 px-2 text-slate-500 truncate max-w-[150px]">{bk.address}</td>
+                          <td className="py-3.5 px-2 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              {(bk.status === 'REQUESTED' || bk.status === 'ASSIGNED') && (
+                                <>
+                                  <button
+                                    onClick={() => handleWorkerBookingAction(bk.id, 'ACCEPT')}
+                                    className="px-2 py-1 bg-emerald-650 hover:bg-emerald-600 text-white rounded font-bold text-[9px] cursor-pointer"
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    onClick={() => handleWorkerBookingAction(bk.id, 'REJECT')}
+                                    className="px-2 py-1 bg-red-950 hover:bg-red-900 text-red-400 rounded font-bold text-[9px] cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+
+                              {bk.status === 'ACCEPTED' && (
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'TRANSIT')}
+                                  className="px-2 py-1 bg-cyan-650 hover:bg-cyan-600 text-white rounded font-bold text-[9px] cursor-pointer"
+                                >
+                                  Start Transit
+                                </button>
+                              )}
+
+                              {bk.status === 'ON_THE_WAY' && (
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'ARRIVE')}
+                                  className="px-2 py-1 bg-indigo-650 hover:bg-indigo-600 text-white rounded font-bold text-[9px] cursor-pointer"
+                                >
+                                  Arrived
+                                </button>
+                              )}
+
+                              {bk.status === 'ARRIVED' && (
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'START_OTP')}
+                                  className="px-2 py-1 bg-purple-650 hover:bg-purple-600 text-white rounded font-bold text-[9px] cursor-pointer animate-pulse"
+                                >
+                                  Verify OTP
+                                </button>
+                              )}
+
+                              {bk.status === 'IN_PROGRESS' && (
+                                <button
+                                  onClick={() => handleWorkerBookingAction(bk.id, 'COMPLETE')}
+                                  className="px-2 py-1 bg-emerald-650 hover:bg-emerald-600 text-white rounded font-bold text-[9px] cursor-pointer"
+                                >
+                                  Complete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
 
         {adminTab === 'master_panel' && (
