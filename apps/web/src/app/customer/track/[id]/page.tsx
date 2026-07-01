@@ -274,11 +274,14 @@ export default function TrackBooking() {
     return () => clearInterval(interval);
   }, [routePoints, currentStatus, bookingId, token]);
 
+  const arrivedOrLater = ['ARRIVED', 'OTP_VERIFIED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'COMPLETED'].includes(currentStatus);
   const activeTechCoords = (currentStatus === 'ON_THE_WAY' && routePoints[techIndex])
     ? routePoints[techIndex]
-    : (bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
-      ? [bookingDetails.tech_latitude, bookingDetails.tech_longitude] as [number, number]
-      : (routePoints[techIndex] || startCoords);
+    : arrivedOrLater
+      ? destCoords
+      : (bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
+        ? [bookingDetails.tech_latitude, bookingDetails.tech_longitude] as [number, number]
+        : (routePoints[techIndex] || startCoords);
 
   // Job progress simulator (when status is IN_PROGRESS)
   useEffect(() => {

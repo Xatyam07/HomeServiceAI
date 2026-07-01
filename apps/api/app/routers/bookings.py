@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -8,6 +8,7 @@ from uuid import UUID
 from typing import List
 import random
 import json
+import asyncio
 from datetime import datetime
 from pydantic import BaseModel
 from app.websocket import manager
@@ -217,6 +218,52 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         
     return booking
 
+def check_and_close_booking(booking, db: Session):
+    if booking and booking.status == "ARRIVED" and booking.arrived_at:
+        from app.timezone_util import get_ist_time
+        elapsed = (get_ist_time() - booking.arrived_at).total_seconds()
+        if elapsed > 300: # 5 minutes
+            booking.status = "CANCELLED"
+            db.commit()
+            db.refresh(booking)
+            from app.websocket import manager
+            import asyncio
+            asyncio.create_task(manager.broadcast({
+                "event": "booking_updated",
+                "booking_id": str(booking.id),
+                "status": booking.status,
+                "tech_latitude": booking.tech_latitude,
+                "tech_longitude": booking.tech_longitude,
+                "eta_minutes": booking.eta_minutes
+            }))
+            print(f"Booking {booking.id} automatically closed/cancelled on check due to 5-minute OTP timeout.")
+
+async def auto_close_unverified_booking(booking_id_str: str):
+    await asyncio.sleep(300) # wait 5 minutes
+    from app.database import SessionLocal
+    from app.models import Booking
+    from app.websocket import manager
+    db = SessionLocal()
+    try:
+        booking = db.query(Booking).filter(Booking.id == UUID(booking_id_str)).first()
+        if booking and booking.status == "ARRIVED":
+            booking.status = "CANCELLED"
+            db.commit()
+            db.refresh(booking)
+            await manager.broadcast({
+                "event": "booking_updated",
+                "booking_id": str(booking.id),
+                "status": booking.status,
+                "tech_latitude": booking.tech_latitude,
+                "tech_longitude": booking.tech_longitude,
+                "eta_minutes": booking.eta_minutes
+            })
+            print(f"Booking {booking_id_str} automatically closed/cancelled due to 5-minute OTP timeout.")
+    except Exception as e:
+        print(f"Error in auto_close_unverified_booking: {e}")
+    finally:
+        db.close()
+
 @router.get("/", response_model=List[BookingResponse])
 async def get_bookings(
     userId: str = Query(...),
@@ -240,22 +287,30 @@ async def get_bookings(
     if not user:
         return []
 
+    bookings = []
     if role == "PROVIDER":
         is_master_sim = user.email.lower() == "xatyammishra07@gmail.com"
         if is_master_sim:
             dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.%")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
-            return db.query(Booking).options(joinedload(Booking.review)).filter(
+            bookings = db.query(Booking).options(joinedload(Booking.review)).filter(
                 (Booking.provider_id == user_uuid) | 
                 (Booking.provider_id.in_(dummy_ids_list))
             ).order_by(Booking.created_at.desc()).all()
-        return db.query(Booking).options(joinedload(Booking.review)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
-    return db.query(Booking).options(joinedload(Booking.review)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
+        else:
+            bookings = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+    else:
+        bookings = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
+
+    for b in bookings:
+        check_and_close_booking(b, db)
+    return bookings
 
 @router.put("/{booking_id}/status", response_model=BookingResponse)
 async def update_booking_status(
     booking_id: UUID,
     dto: BookingStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
@@ -278,6 +333,14 @@ async def update_booking_status(
         booking.tech_longitude = dto.techLng
     if dto.etaMinutes is not None:
         booking.eta_minutes = dto.etaMinutes
+
+    if booking.status == "ARRIVED":
+        from app.timezone_util import get_ist_time
+        booking.tech_latitude = booking.latitude
+        booking.tech_longitude = booking.longitude
+        booking.eta_minutes = 0
+        booking.arrived_at = get_ist_time()
+        background_tasks.add_task(auto_close_unverified_booking, str(booking.id))
 
     db.commit()
     db.refresh(booking)
@@ -310,6 +373,7 @@ async def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
+    check_and_close_booking(booking, db)
     return booking
 
 @router.post("/{booking_id}/accept")

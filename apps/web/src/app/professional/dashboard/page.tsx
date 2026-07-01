@@ -225,11 +225,14 @@ function ProviderDashboardContent() {
     }
   }, [dbJobs.some(j => j.status === 'ON_THE_WAY'), user]);
 
+  const activeWayJob = dbJobs.find(j => ['ON_THE_WAY', 'ARRIVED', 'OTP_VERIFIED', 'SERVICE_STARTED'].includes(j.status));
   const activeTechCoords = (hasOnTheWay && routePoints[techIndex])
     ? routePoints[techIndex]
-    : (user?.profile?.latitude && user?.profile?.longitude)
-      ? [user.profile.latitude, user.profile.longitude] as [number, number]
-      : (routePoints[techIndex] || startCoords);
+    : (activeWayJob && ['ARRIVED', 'OTP_VERIFIED', 'SERVICE_STARTED'].includes(activeWayJob.status))
+      ? [activeWayJob.latitude || 26.4499, activeWayJob.longitude || 80.3319] as [number, number]
+      : (user?.profile?.latitude && user?.profile?.longitude)
+        ? [user.profile.latitude, user.profile.longitude] as [number, number]
+        : (routePoints[techIndex] || startCoords);
   const [otpInputs, setOtpInputs] = useState<{[key: string]: string}>({});
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',

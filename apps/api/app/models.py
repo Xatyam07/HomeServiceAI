@@ -110,6 +110,7 @@ class Booking(Base):
     payment_status = Column(String, default="PENDING") # PENDING, PAID, REFUNDED, FAILED
     otp = Column(String, nullable=True)
     otp_verified_at = Column(DateTime, nullable=True)
+    arrived_at = Column(DateTime, nullable=True)
     rejected_providers = Column(String, default="[]") # JSON list of provider IDs who rejected
     created_at = Column(DateTime, default=get_ist_time)
     updated_at = Column(DateTime, default=get_ist_time, onupdate=get_ist_time)
