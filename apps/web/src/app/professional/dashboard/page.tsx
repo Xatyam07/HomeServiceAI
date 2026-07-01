@@ -183,8 +183,34 @@ function ProfessionalDashboardContent() {
   useEffect(() => {
     loadProfessionalJobs();
     const interval = setInterval(loadProfessionalJobs, 5000);
+
+    if (user && token) {
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost = API_BASE.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProto}//${wsHost}/api/ws/${user.id}`;
+      console.log("Professional WebSocket connecting:", wsUrl);
+      const socket = new WebSocket(wsUrl);
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          console.log("Professional received event:", msg);
+          if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed") {
+            loadProfessionalJobs();
+          }
+        } catch (err) {
+          console.error("Error parsing professional WebSocket message:", err);
+        }
+      };
+
+      return () => {
+        socket.close();
+        clearInterval(interval);
+      };
+    }
+
     return () => clearInterval(interval);
-  }, [token, user]);
+  }, [token, user, API_BASE]);
 
   const updateJobStatus = async (bookingId: string, statusStr: string) => {
     try {

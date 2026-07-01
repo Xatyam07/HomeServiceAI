@@ -131,8 +131,31 @@ export default function TrackBooking() {
 
     loadBookingData();
     const interval = setInterval(loadBookingData, 4000);
-    return () => clearInterval(interval);
-  }, [token, bookingId]);
+
+    // WebSocket connection
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = API_BASE.replace(/^https?:\/\//, '');
+    const wsUrl = `${wsProto}//${wsHost}/api/ws/${bookingId}`;
+    console.log("Customer WebSocket connecting:", wsUrl);
+    const socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        console.log("Customer received event:", msg);
+        if (msg.booking_id === bookingId) {
+          loadBookingData();
+        }
+      } catch (err) {
+        console.error("Error parsing customer WebSocket message:", err);
+      }
+    };
+
+    return () => {
+      socket.close();
+      clearInterval(interval);
+    };
+  }, [token, bookingId, API_BASE]);
 
   // Chat with technician
   const [chatInput, setChatInput] = useState('');

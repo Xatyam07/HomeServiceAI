@@ -73,6 +73,34 @@ app.include_router(reviewer.router, prefix="/api/ai/review", tags=["AI Reviewer"
 def read_root():
     return {"status": "online", "service": "HomeSphere AI Unified Backend Services"}
 
+from fastapi import WebSocket, WebSocketDisconnect
+from app.websocket import manager
+import json
+
+@app.websocket("/api/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(user_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                if msg.get("event") == "provider_location":
+                    await manager.broadcast({
+                        "event": "provider_location",
+                        "provider_id": user_id,
+                        "latitude": msg.get("latitude"),
+                        "longitude": msg.get("longitude"),
+                        "booking_id": msg.get("booking_id")
+                    })
+            except Exception as json_err:
+                print(f"Error parsing websocket frame from {user_id}: {json_err}")
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+    except Exception as e:
+        print(f"WebSocket error for {user_id}: {e}")
+        manager.disconnect(user_id)
+
 @app.get("/health")
 def health_check(response: Response):
     # 1. Check PostgreSQL connection

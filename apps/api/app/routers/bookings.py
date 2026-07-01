@@ -10,6 +10,7 @@ import random
 import json
 from datetime import datetime
 from pydantic import BaseModel
+from app.websocket import manager
 
 class OtpVerifyRequest(BaseModel):
     otp: str
@@ -59,8 +60,32 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     # Filter out already rejected providers
     candidates = [c for c in candidates if str(c[0].id) not in rejected_ids]
     
+    # DISPATCH LOGIC:
+    # "IF original professional exists -> assign to original. ELSE assign to xatyammishra07@gmail.com"
+    original_candidates = []
+    testing_candidate = None
+    for u, p in candidates:
+        email = u.email.lower()
+        if email == "xatyammishra07@gmail.com":
+            testing_candidate = (u, p)
+        elif not email.endswith("@homesphere.com"):
+            original_candidates.append((u, p))
+            
+    if original_candidates:
+        candidates = original_candidates
+    else:
+        if testing_candidate:
+            candidates = [testing_candidate]
+        else:
+            satyam = db.query(User, ProviderProfile).join(
+                ProviderProfile, User.id == ProviderProfile.user_id
+            ).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+            if satyam:
+                candidates = [satyam]
+            else:
+                candidates = []
+    
     if not candidates:
-        # No available providers left
         booking.provider_id = None
         booking.status = "REQUESTED"
         return False
@@ -101,7 +126,7 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     return True
 
 @router.post("/", response_model=BookingResponse)
-def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
+async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
     customer = db.query(User).filter(User.id == dto.customerId).first()
     if not customer:
         raise HTTPException(
@@ -138,10 +163,33 @@ def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(booking)
         
+    # Broadcast websocket events
+    await manager.broadcast({
+        "event": "booking_created",
+        "booking_id": str(booking.id),
+        "customer_id": str(booking.customer_id),
+        "provider_id": str(booking.provider_id) if booking.provider_id else None,
+        "status": booking.status
+    })
+    
+    await manager.broadcast({
+        "event": "booking_popup",
+        "booking_id": str(booking.id),
+        "customer_name": booking.customer_name,
+        "customer_email": booking.customer_email,
+        "provider_id": str(booking.provider_id) if booking.provider_id else None,
+        "service_type": booking.service_type,
+        "description": booking.description,
+        "address": booking.address,
+        "total_cost": booking.total_cost,
+        "latitude": booking.latitude,
+        "longitude": booking.longitude
+    })
+        
     return booking
 
 @router.get("/", response_model=List[BookingResponse])
-def get_bookings(
+async def get_bookings(
     userId: str = Query(...),
     role: str = Query(...),
     db: Session = Depends(get_db)
@@ -166,7 +214,6 @@ def get_bookings(
     if role == "PROVIDER":
         is_master_sim = user.email.lower() == "xatyammishra07@gmail.com"
         if is_master_sim:
-            # Query IDs of all dummy professionals
             dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.com")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
             return db.query(Booking).filter(
@@ -177,7 +224,7 @@ def get_bookings(
     return db.query(Booking).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 
 @router.put("/{booking_id}/status", response_model=BookingResponse)
-def update_booking_status(
+async def update_booking_status(
     booking_id: UUID,
     dto: BookingStatusUpdate,
     db: Session = Depends(get_db)
@@ -205,17 +252,34 @@ def update_booking_status(
 
     db.commit()
     db.refresh(booking)
+    
+    # Broadcast updates
+    await manager.broadcast({
+        "event": "booking_updated",
+        "booking_id": str(booking.id),
+        "status": booking.status,
+        "tech_latitude": booking.tech_latitude,
+        "tech_longitude": booking.tech_longitude,
+        "eta_minutes": booking.eta_minutes
+    })
+    
+    if booking.status == "ARRIVED":
+        await manager.broadcast({
+            "event": "provider_arrived",
+            "booking_id": str(booking.id)
+        })
+        
     return booking
 
 @router.get("/{booking_id}", response_model=BookingResponse)
-def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
+async def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
     return booking
 
 @router.post("/{booking_id}/accept")
-def accept_booking(
+async def accept_booking(
     booking_id: UUID, 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -233,10 +297,20 @@ def accept_booking(
         
     db.commit()
     db.refresh(booking)
+    
+    # Broadcast accept
+    await manager.broadcast({
+        "event": "booking_accepted",
+        "booking_id": str(booking.id),
+        "provider_id": str(booking.provider_id),
+        "status": booking.status,
+        "otp": booking.otp
+    })
+    
     return {"status": "SUCCESS", "message": "Booking request accepted. Technician en route.", "booking": booking}
 
 @router.post("/{booking_id}/reject")
-def reject_booking(booking_id: UUID, db: Session = Depends(get_db)):
+async def reject_booking(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
@@ -256,21 +330,29 @@ def reject_booking(booking_id: UUID, db: Session = Depends(get_db)):
     find_and_assign_provider(booking, db)
     db.commit()
     db.refresh(booking)
+    
+    # Broadcast reject
+    await manager.broadcast({
+        "event": "booking_rejected",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    
     return {"status": "SUCCESS", "message": "Booking rejected. Re-routed to the next candidate.", "booking": booking}
 
 @router.post("/{booking_id}/ignore")
-def ignore_booking(booking_id: UUID, db: Session = Depends(get_db)):
-    return reject_booking(booking_id, db)
+async def ignore_booking(booking_id: UUID, db: Session = Depends(get_db)):
+    return await reject_booking(booking_id, db)
 
 @router.get("/{booking_id}/otp")
-def get_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
+async def get_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking or not booking.otp:
         raise HTTPException(status_code=404, detail="No active OTP code found.")
     return {"otp": booking.otp}
 
 @router.post("/{booking_id}/send-otp")
-def send_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
+async def send_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
@@ -285,7 +367,7 @@ def send_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
     }
 
 @router.post("/{booking_id}/verify-otp")
-def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Session = Depends(get_db)):
+async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
@@ -301,10 +383,22 @@ def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Session 
     db.commit()
     db.refresh(booking)
     
+    # Broadcast OTP verified / Service Started
+    await manager.broadcast({
+        "event": "otp_verified",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    await manager.broadcast({
+        "event": "service_started",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    
     return {"status": "SUCCESS", "message": "OTP verified successfully. Job has commenced.", "bookingStatus": booking.status}
 
 @router.post("/{booking_id}/confirm-completion")
-def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
+async def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
@@ -324,6 +418,14 @@ def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
             
     db.commit()
     db.refresh(booking)
+    
+    # Broadcast completion
+    await manager.broadcast({
+        "event": "service_completed",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    
     return {"status": "SUCCESS", "message": "Job completion confirmed.", "bookingStatus": booking.status}
 
 class SubmitReviewRequest(BaseModel):
@@ -331,7 +433,7 @@ class SubmitReviewRequest(BaseModel):
     comment: str
 
 @router.post("/{booking_id}/review")
-def submit_booking_review(booking_id: UUID, req: SubmitReviewRequest, db: Session = Depends(get_db)):
+async def submit_booking_review(booking_id: UUID, req: SubmitReviewRequest, db: Session = Depends(get_db)):
     from app.models import Review
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
@@ -363,6 +465,15 @@ def submit_booking_review(booking_id: UUID, req: SubmitReviewRequest, db: Sessio
             profile.rating = round(sum(ratings_list) / len(ratings_list), 2)
             
     db.commit()
+    
+    # Broadcast review
+    await manager.broadcast({
+        "event": "review_submitted",
+        "booking_id": str(booking_id),
+        "rating": req.rating,
+        "comment": req.comment
+    })
+    
     return {
         "status": "SUCCESS", 
         "message": "Review submitted and analyzed successfully.", 

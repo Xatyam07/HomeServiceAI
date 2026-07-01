@@ -104,7 +104,7 @@ def create_payment_order(dto: OrderCreateRequest, db: Session = Depends(get_db))
     }
 
 @router.post("/verify")
-def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db)):
+async def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db)):
     record = db.query(PaymentRecord).filter(PaymentRecord.razorpay_order_id == dto.razorpay_order_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Order record not found.")
@@ -163,6 +163,16 @@ def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db)):
         db.add(invoice)
 
     db.commit()
+    
+    # Broadcast payment_completed event
+    from app.websocket import manager
+    await manager.broadcast({
+        "event": "payment_completed",
+        "booking_id": str(booking.id) if booking else str(dto.booking_id),
+        "status": booking.status if booking else "COMPLETED",
+        "payment_status": booking.payment_status if booking else "PAID"
+    })
+    
     return {"status": "success", "message": "Payment verified and invoice generated."}
 
 @router.post("/refund/{payment_id}")
@@ -269,7 +279,7 @@ def add_to_wallet(dto: WalletAddRequest, db: Session = Depends(get_db)):
     return {"status": "success", "message": f"Added ₹{dto.amount} successfully to wallet."}
 
 @router.post("/wallet/pay")
-def pay_with_wallet(dto: WalletPayRequest, db: Session = Depends(get_db)):
+async def pay_with_wallet(dto: WalletPayRequest, db: Session = Depends(get_db)):
     # Check balance
     transactions = db.query(WalletTransaction).filter(WalletTransaction.user_id == dto.user_id).all()
     credits = sum(t.amount for t in transactions if t.type == "CREDIT")
@@ -310,6 +320,16 @@ def pay_with_wallet(dto: WalletPayRequest, db: Session = Depends(get_db)):
         booking.status = "ACCEPTED"
     
     db.commit()
+    
+    # Broadcast payment_completed event
+    from app.websocket import manager
+    await manager.broadcast({
+        "event": "payment_completed",
+        "booking_id": str(booking.id),
+        "status": booking.status,
+        "payment_status": booking.payment_status
+    })
+    
     return {"status": "success", "message": "Booking paid successfully using wallet credits."}
 
 # --- COUPON ENDPOINTS ---
