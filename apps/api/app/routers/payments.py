@@ -137,7 +137,8 @@ async def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db
         booking.payment_status = "PAID"
         # If this was full payment or tip, advance status
         if record.payment_type in ["FULL_BEFORE", "WALLET"] and booking.status not in ["SERVICE_COMPLETED", "PAYMENT_PENDING"]:
-            booking.status = "ACCEPTED"
+            if booking.status not in ["PENDING_PROVIDER_ACCEPTANCE", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "SERVICE_STARTED"]:
+                booking.status = "PENDING_PROVIDER_ACCEPTANCE"
         elif record.payment_type == "FULL_AFTER" or (record.payment_type == "WALLET" and booking.status in ["SERVICE_COMPLETED", "PAYMENT_PENDING"]):
             booking.status = "PAYMENT_COMPLETED"
             # Release credit transaction to provider
@@ -150,7 +151,8 @@ async def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db
                 )
                 db.add(wallet_tx)
         elif record.payment_type == "PARTIAL":
-            booking.status = "ACCEPTED" # advance paid, provider routed
+            if booking.status not in ["PENDING_PROVIDER_ACCEPTANCE", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "SERVICE_STARTED"]:
+                booking.status = "PENDING_PROVIDER_ACCEPTANCE"
 
         # Generate GST invoice on captured payment
         gst_amt = round(record.amount * 0.18, 2)

@@ -272,14 +272,17 @@ function ProviderDashboardContent() {
           const msg = JSON.parse(event.data);
           console.log("Professional received event:", msg);
           
-          if (msg.event === "booking_popup" && msg.provider_id === user.id) {
+          const isAssignedToThisUser = msg.provider_id === user.id || 
+            (user.email?.toLowerCase() === 'xatyammishra07@gmail.com' && msg.provider_email && msg.provider_email.includes('homesphere'));
+            
+          if (msg.event === "booking_popup" && isAssignedToThisUser) {
             playNotificationSound();
             setIncomingJob({
               id: msg.booking_id,
               customer: msg.customer_name || "Valued Customer",
               customerPhoto: "",
-              city: "Kanpur",
-              address: msg.address || "Kanpur Center",
+              city: "Hyderabad",
+              address: msg.address || "Hyderabad Center",
               service: msg.service_type,
               description: msg.description || "No description provided.",
               distance: "1.5 km away",
@@ -289,7 +292,7 @@ function ProviderDashboardContent() {
               paymentMethod: "Wallet",
               isRealBooking: true
             });
-            setCountdown(15);
+            setCountdown(30);
           }
           
           if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed") {

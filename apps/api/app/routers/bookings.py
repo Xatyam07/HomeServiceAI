@@ -194,12 +194,19 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         "status": booking.status
     })
     
+    p_email = ""
+    if booking.provider_id:
+        p_user = db.query(User).filter(User.id == booking.provider_id).first()
+        if p_user:
+            p_email = p_user.email.lower()
+
     await manager.broadcast({
         "event": "booking_popup",
         "booking_id": str(booking.id),
         "customer_name": booking.customer_name,
         "customer_email": booking.customer_email,
         "provider_id": str(booking.provider_id) if booking.provider_id else None,
+        "provider_email": p_email,
         "service_type": booking.service_type,
         "description": booking.description,
         "address": booking.address,
