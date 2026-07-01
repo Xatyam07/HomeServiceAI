@@ -286,17 +286,18 @@ def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Booking not found.")
         
     booking.status = "COMPLETED"
-    booking.payment_status = "PAID"
     
-    if booking.provider_id:
-        wallet_tx = WalletTransaction(
-            user_id=booking.provider_id,
-            amount=booking.total_cost,
-            type="CREDIT",
-            reference=f"Payout for Booking {booking.id}"
-        )
-        db.add(wallet_tx)
-        
+    # If booking is already paid (prepaid), release payout to technician
+    if booking.payment_status == "PAID":
+        if booking.provider_id:
+            wallet_tx = WalletTransaction(
+                user_id=booking.provider_id,
+                amount=booking.total_cost,
+                type="CREDIT",
+                reference=f"Payout for Booking {booking.id}"
+            )
+            db.add(wallet_tx)
+            
     db.commit()
     db.refresh(booking)
-    return {"status": "SUCCESS", "message": "Job completion confirmed and payout released to technician.", "bookingStatus": booking.status}
+    return {"status": "SUCCESS", "message": "Job completion confirmed.", "bookingStatus": booking.status}

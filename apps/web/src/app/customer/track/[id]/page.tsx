@@ -269,6 +269,84 @@ export default function TrackBooking() {
     }
   };
 
+  const payOutstandingInvoice = async (method: 'Wallet' | 'UPI') => {
+    if (!bookingDetails) return;
+    try {
+      if (method === 'Wallet') {
+        const res = await fetch(`${API_BASE}/api/payments/wallet/pay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            user_id: bookingDetails.customer_id,
+            amount: bookingDetails.total_cost
+          })
+        });
+        if (res.ok) {
+          alert("Payment verified successfully! Outstanding balance cleared.");
+          setCurrentStatus('PAYMENT_SUCCESSFUL');
+          const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (reloadRes.ok) {
+            setBookingDetails(await reloadRes.json());
+          }
+        } else {
+          const err = await res.json();
+          alert(`Wallet payment failed: ${err.detail}`);
+        }
+      } else {
+        const orderRes = await fetch(`${API_BASE}/api/payments/order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            user_id: bookingDetails.customer_id,
+            amount: bookingDetails.total_cost,
+            payment_type: 'FULL_AFTER'
+          })
+        });
+        if (!orderRes.ok) throw new Error("Failed to create checkout order.");
+        const order = await orderRes.json();
+
+        const verifyRes = await fetch(`${API_BASE}/api/payments/verify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            razorpay_order_id: order.id,
+            razorpay_payment_id: `pay_${Math.random().toString(36).substring(2, 9)}`,
+            signature: "mock_signature_success"
+          })
+        });
+        if (verifyRes.ok) {
+          alert("UPI Payment captured successfully! Outstanding balance cleared.");
+          setCurrentStatus('PAYMENT_SUCCESSFUL');
+          const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (reloadRes.ok) {
+            setBookingDetails(await reloadRes.json());
+          }
+        } else {
+          alert("UPI verification failed.");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Payment processing encountered an error.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative grid-bg">
       {/* Header */}
@@ -341,6 +419,36 @@ export default function TrackBooking() {
                 </span>
               </div>
             </div>
+
+            {/* Payment Outstanding Card */}
+            {bookingDetails?.payment_status === 'PENDING' && (
+              <div className="mt-5 p-5 rounded-2xl border border-yellow-900/30 bg-gradient-to-tr from-yellow-950/20 to-amber-950/20 text-left flex flex-col gap-3 shadow-lg">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <Sparkles size={16} className="animate-pulse" />
+                    <span className="font-extrabold text-xs tracking-wider uppercase">OUTSTANDING PAYMENT DUE</span>
+                  </div>
+                  <span className="font-extrabold text-base text-emerald-400">₹{bookingDetails?.total_cost}</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                  Your service has been completed successfully. Please select a payment option to clear the invoice outstanding balance.
+                </p>
+                <div className="flex gap-3 mt-1">
+                  <button
+                    onClick={() => payOutstandingInvoice('Wallet')}
+                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs text-slate-200 border border-slate-800 rounded-xl font-bold transition-all cursor-pointer"
+                  >
+                    Pay via Wallet
+                  </button>
+                  <button
+                    onClick={() => payOutstandingInvoice('UPI')}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-xs text-white rounded-xl font-bold transition-all cursor-pointer shadow-lg shadow-emerald-600/10"
+                  >
+                    Pay via UPI (Razorpay)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Timeline Tracking */}

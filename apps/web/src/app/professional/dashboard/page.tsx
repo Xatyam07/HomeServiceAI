@@ -11,6 +11,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+const MapComponent = dynamic(() => import('@/components/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 flex items-center justify-center bg-slate-900/40 border border-white/5 rounded-xl animate-pulse">
+      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Syncing map view...</span>
+    </div>
+  ),
+});
 
 function ProfessionalDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
@@ -31,6 +41,59 @@ function ProfessionalDashboardContent() {
     }
   }, [user, router]);
   
+  
+  // Simulated en-route coordinates map tracker
+  const startCoords: [number, number] = [17.4600, 78.3600];
+  const destCoords: [number, number] = [17.4485, 78.3741];
+  const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
+  const [techIndex, setTechIndex] = useState(0);
+
+  const generateSimulatedRoute = (start: [number, number], dest: [number, number]): Array<[number, number]> => {
+    const turn1: [number, number] = [start[0] - 0.003, start[1] + 0.005];
+    const turn2: [number, number] = [start[0] - 0.007, start[1] + 0.008];
+    const turn3: [number, number] = [dest[0] + 0.003, dest[1] - 0.002];
+    
+    const route: Array<[number, number]> = [];
+    const interpolate = (p1: [number, number], p2: [number, number], steps: number) => {
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        route.push([p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])]);
+      }
+    };
+    
+    interpolate(start, turn1, 15);
+    interpolate(turn1, turn2, 15);
+    interpolate(turn2, turn3, 15);
+    interpolate(turn3, dest, 15);
+    route.push(dest);
+    return route;
+  };
+
+  useEffect(() => {
+    setRoutePoints(generateSimulatedRoute(startCoords, destCoords));
+  }, []);
+
+  const hasOnTheWay = dbJobs.some(j => j.status === 'ON_THE_WAY');
+
+  useEffect(() => {
+    if (routePoints.length === 0 || !hasOnTheWay) return;
+    
+    setTechIndex(0);
+    const interval = setInterval(() => {
+      setTechIndex((prev) => {
+        const next = prev + 1;
+        if (next >= routePoints.length - 1) {
+          clearInterval(interval);
+          return routePoints.length - 1;
+        }
+        return next;
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [hasOnTheWay, routePoints]);
+
+  const activeTechCoords = routePoints[techIndex] || startCoords;
+
   // Testing mode states for multi-skill professional
   const [switching, setSwitching] = useState(false);
   const [selectedTestingCategory, setSelectedTestingCategory] = useState(user?.profile?.category || 'Plumber');
@@ -177,23 +240,7 @@ function ProfessionalDashboardContent() {
   const [incomingJob, setIncomingJob] = useState<any | null>(null);
   const [countdown, setCountdown] = useState(25);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIncomingJob({
-        id: "HS-9942",
-        customer: "Jane Doe",
-        service: "Plumber (Kitchen Leakage)",
-        address: "Flat 405, Rainbow Residency, Hitec City",
-        distance: "1.8 km away",
-        eta: "6 mins travel",
-        urgency: "HIGH",
-        estimatedFee: "₹850"
-      });
-      setCountdown(25);
-    }, 12000); // Trigger slower to avoid interrupting profile updates
 
-    return () => clearTimeout(timer);
-  }, []);
 
   // Countdown clock
   useEffect(() => {
@@ -624,12 +671,28 @@ function ProfessionalDashboardContent() {
                       )}
 
                       {job.status === 'ON_THE_WAY' && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'ARRIVED')}
-                          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          Mark Arrived
-                        </button>
+                        <div className="flex flex-col gap-2 w-full mt-3">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-left">Live Transit GPS Map</span>
+                          <div className="w-full h-48 rounded-xl border border-slate-900 overflow-hidden relative">
+                            <MapComponent
+                              center={destCoords}
+                              customerMarker={destCoords}
+                              techMarker={activeTechCoords}
+                              routeCoordinates={routePoints}
+                              theme="dark"
+                            />
+                            <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-slate-950/80 border border-slate-800 text-[8px] text-slate-400 z-[400] flex flex-col text-left">
+                              <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
+                              <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => updateJobStatus(job.id, 'ARRIVED')}
+                            className="w-full mt-1.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
+                          >
+                            Mark Arrived
+                          </button>
+                        </div>
                       )}
 
                       {job.status === 'ARRIVED' && (

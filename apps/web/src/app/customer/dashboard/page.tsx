@@ -220,6 +220,30 @@ function DashboardContent() {
     }
   };
 
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm("Are you sure you want to cancel this booking request?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: 'CANCELLED' })
+      });
+      if (res.ok) {
+        alert("Booking cancelled successfully.");
+        loadCustomerBookings();
+      } else {
+        const data = await res.json();
+        alert(`Cancellation failed: ${data.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error cancelling booking.");
+    }
+  };
+
   useEffect(() => {
     loadCustomerBookings();
     const interval = setInterval(loadCustomerBookings, 8000);
@@ -1377,13 +1401,21 @@ function DashboardContent() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED' && (
-                        <Link
-                          href={`/customer/track/${b.id}`}
-                          className="px-3.5 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg font-bold"
-                        >
-                          Track location & OTP
-                        </Link>
+                      {b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED' && b.status !== 'COMPLETED' && (
+                        <>
+                          <Link
+                            href={`/customer/track/${b.id}`}
+                            className="px-3.5 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg font-bold"
+                          >
+                            Track location & OTP
+                          </Link>
+                          <button
+                            onClick={() => handleCancelBooking(b.id)}
+                            className="px-3 py-2 bg-red-950/60 hover:bg-red-900/60 text-red-400 border border-red-900/30 rounded-lg font-bold cursor-pointer transition-all"
+                          >
+                            Cancel Request
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
