@@ -61,13 +61,7 @@ export default function TrackBooking() {
           alert(`Review submitted successfully!\nAI Sentiment Score: ${data.ai_sentiment}`);
         }
         setReviewClosed(true);
-        // Refresh booking details
-        const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (reloadRes.ok) {
-          setBookingDetails(await reloadRes.json());
-        }
+        window.location.href = '/customer/dashboard';
       } else {
         const err = await res.json();
         alert(`Failed to submit review: ${err.detail || err.message}`);
@@ -590,6 +584,28 @@ export default function TrackBooking() {
                 </div>
               </div>
             )}
+
+            {/* Payment Completed & Closed Card */}
+            {(bookingDetails?.payment_status === 'PAID' || ['PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(currentStatus)) && (
+              <div className="mt-5 p-5 rounded-2xl border border-emerald-900/30 bg-gradient-to-tr from-emerald-950/20 to-teal-950/20 text-left flex flex-col gap-3 shadow-lg">
+                <div className="flex justify-between items-center text-emerald-450">
+                  <div className="flex items-center gap-1.5 font-extrabold text-xs tracking-wider uppercase">
+                    <Sparkles size={14} className="text-emerald-450 animate-pulse" />
+                    <span>SERVICE COMPLETED & CLOSED</span>
+                  </div>
+                  <span className="font-extrabold text-xs text-emerald-400">Paid</span>
+                </div>
+                <p className="text-xs text-slate-350 leading-relaxed font-semibold">
+                  This booking has been completed successfully and payment is cleared. Thank you for choosing HomeSphere AI!
+                </p>
+                <button
+                  onClick={() => window.location.href = '/customer/dashboard'}
+                  className="w-full py-2.5 bg-emerald-650 hover:bg-emerald-600 text-xs text-white rounded-xl font-bold transition-all text-center"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Timeline Tracking */}
@@ -869,7 +885,10 @@ export default function TrackBooking() {
                   <span className="font-extrabold text-sm tracking-wider uppercase text-slate-200">Rate Your Service Experience</span>
                 </div>
                 <button
-                  onClick={() => setReviewClosed(true)}
+                  onClick={() => {
+                    setReviewClosed(true);
+                    window.location.href = '/customer/dashboard';
+                  }}
                   className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors text-[10px] font-bold"
                 >
                   Skip

@@ -1416,6 +1416,21 @@ function AdminManagementDashboard() {
   const [routePoints, setRoutePoints] = useState<[number, number][]>([]);
   const [techIndex, setTechIndex] = useState(0);
 
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const updated = activeBookings.find(j => j.id === selectedBooking.id);
+    if (updated) {
+      if (['PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(updated.status) && !['PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(selectedBooking.status)) {
+        setShowTrackModal(false);
+        setShowDrawer(false);
+        setSelectedBooking(null);
+        alert("Payment completed and job closed successfully!");
+      } else {
+        setSelectedBooking(updated);
+      }
+    }
+  }, [activeBookings]);
+
   const ROLES = [
     "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "AC Installation", 
     "Deep Cleaning", "Pest Control", "Babysitter", "Driver"

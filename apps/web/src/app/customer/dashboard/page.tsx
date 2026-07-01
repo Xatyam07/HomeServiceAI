@@ -1390,7 +1390,7 @@ function DashboardContent() {
             {/* Right Side Column (4 cols) */}
             <div className="lg:col-span-4 flex flex-col gap-6 text-left">
               {/* Active Bookings Quick Status Widget */}
-              {dbBookings.filter(b => b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED' && b.status !== 'COMPLETED').map(b => (
+              {dbBookings.filter(b => !['COMPLETED', 'PAYMENT_COMPLETED', 'PAYMENT_SUCCESSFUL', 'CLOSED', 'CANCELLED'].includes(b.status)).map(b => (
                 <div key={b.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 flex flex-col gap-3">
                   <div className="flex justify-between items-start">
                     <div className="flex flex-col">
@@ -1435,7 +1435,7 @@ function DashboardContent() {
                   <div className="flex justify-between items-center p-3 rounded-lg bg-black/20 border border-slate-900">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-slate-500">Active Bookings</span>
-                      <span className="text-sm font-bold text-white">{dbBookings.filter(b => b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED').length}</span>
+                      <span className="text-sm font-bold text-white">{dbBookings.filter(b => !['COMPLETED', 'PAYMENT_COMPLETED', 'PAYMENT_SUCCESSFUL', 'CLOSED', 'CANCELLED'].includes(b.status)).length}</span>
                     </div>
                     <div className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
                   </div>
