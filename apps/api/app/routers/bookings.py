@@ -141,23 +141,39 @@ def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[BookingResponse])
 def get_bookings(
-    userId: UUID = Query(...),
+    userId: str = Query(...),
     role: str = Query(...),
     db: Session = Depends(get_db)
 ):
+    if isinstance(userId, UUID):
+        user_uuid = userId
+        user = db.query(User).filter(User.id == user_uuid).first()
+    else:
+        try:
+            user_uuid = UUID(userId)
+            user = db.query(User).filter(User.id == user_uuid).first()
+        except ValueError:
+            user = db.query(User).filter(User.firebase_uid == userId).first()
+            if user:
+                user_uuid = user.id
+            else:
+                return []
+            
+    if not user:
+        return []
+
     if role == "PROVIDER":
-        user = db.query(User).filter(User.id == userId).first()
-        is_master_sim = user and user.email.lower() == "xatyammishra07@gmail.com"
+        is_master_sim = user.email.lower() == "xatyammishra07@gmail.com"
         if is_master_sim:
             # Query IDs of all dummy professionals
             dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.com")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
             return db.query(Booking).filter(
-                (Booking.provider_id == userId) | 
+                (Booking.provider_id == user_uuid) | 
                 (Booking.provider_id.in_(dummy_ids_list))
             ).order_by(Booking.created_at.desc()).all()
-        return db.query(Booking).filter(Booking.provider_id == userId).order_by(Booking.created_at.desc()).all()
-    return db.query(Booking).filter(Booking.customer_id == userId).order_by(Booking.created_at.desc()).all()
+        return db.query(Booking).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+    return db.query(Booking).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 
 @router.put("/{booking_id}/status", response_model=BookingResponse)
 def update_booking_status(

@@ -218,8 +218,25 @@ def get_payment_history(userId: UUID, db: Session = Depends(get_db)):
 
 # --- WALLET ENDPOINTS ---
 @router.get("/wallet/balance")
-def get_wallet_balance(userId: UUID, db: Session = Depends(get_db)):
-    transactions = db.query(WalletTransaction).filter(WalletTransaction.user_id == userId).all()
+def get_wallet_balance(userId: str, db: Session = Depends(get_db)):
+    if isinstance(userId, UUID):
+        user_uuid = userId
+        user = db.query(User).filter(User.id == user_uuid).first()
+    else:
+        try:
+            user_uuid = UUID(userId)
+            user = db.query(User).filter(User.id == user_uuid).first()
+        except ValueError:
+            user = db.query(User).filter(User.firebase_uid == userId).first()
+            if user:
+                user_uuid = user.id
+            else:
+                return {"balance": 0.0, "transactions": []}
+            
+    if not user:
+        return {"balance": 0.0, "transactions": []}
+
+    transactions = db.query(WalletTransaction).filter(WalletTransaction.user_id == user_uuid).all()
     credits = sum(t.amount for t in transactions if t.type == "CREDIT")
     debits = sum(t.amount for t in transactions if t.type == "DEBIT")
     balance = max(credits - debits, 0.0)

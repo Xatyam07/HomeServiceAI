@@ -1338,8 +1338,43 @@ function DashboardContent() {
 
             {/* Right Side Column (4 cols) */}
             <div className="lg:col-span-4 flex flex-col gap-6 text-left">
+              {/* Active Bookings Quick Status Widget */}
+              {dbBookings.filter(b => b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED' && b.status !== 'COMPLETED').map(b => (
+                <div key={b.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Active Booking</span>
+                      <span className="text-sm font-bold text-white mt-0.5">{b.service_type}</span>
+                    </div>
+                    <span className="text-[9px] bg-indigo-950/60 text-indigo-400 border border-indigo-900/30 px-2.5 py-1 rounded-full font-mono font-bold uppercase">
+                      {b.status}
+                    </span>
+                  </div>
+                  
+                  <div className="text-xs text-slate-400">
+                    Address: <span className="text-slate-300">{b.address || 'Not specified'}</span>
+                  </div>
+
+                  <div className="flex gap-2 mt-2">
+                    <Link
+                      href={`/customer/track/${b.id}`}
+                      className="flex-1 py-2 bg-indigo-650 hover:bg-indigo-600 text-white font-bold rounded-lg text-center text-[10px] transition-all flex items-center justify-center gap-1"
+                    >
+                      <Sparkles size={10} />
+                      <span>Track & Verify OTP</span>
+                    </Link>
+                    <button
+                      onClick={() => handleCancelBooking(b.id)}
+                      className="px-3 py-2 bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/30 font-bold rounded-lg text-[10px] transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ))}
+
               {/* Diagnostic Stats Widget */}
-              <div className="p-6 rounded-2xl glass border border-slate-900 flex flex-col gap-4">
+              <div className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
                 <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
                   <History size={15} className="text-indigo-400" />
                   <span>Booking Telemetry</span>
