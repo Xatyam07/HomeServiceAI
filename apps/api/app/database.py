@@ -26,9 +26,9 @@ for attempt in range(1, max_retries + 1):
             db_url,
             echo=False,
             pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=10,
-            pool_timeout=5,
+            pool_size=5,
+            max_overflow=2,
+            pool_timeout=15,
             pool_recycle=1800
         )
         # Test the connection immediately

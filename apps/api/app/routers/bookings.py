@@ -77,17 +77,31 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
         if testing_candidate:
             candidates = [testing_candidate]
         else:
-            satyam = db.query(User, ProviderProfile).join(
-                ProviderProfile, User.id == ProviderProfile.user_id
-            ).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
-            if satyam:
-                candidates = [satyam]
+            satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+            if satyam_user:
+                profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
+                if not profile:
+                    profile = ProviderProfile(
+                        user_id=satyam_user.id,
+                        category=booking.service_type,
+                        experience_yrs=5,
+                        is_verified=True,
+                        is_available=True,
+                        rating=4.8,
+                        city="Kanpur",
+                        latitude=26.4499,
+                        longitude=80.3319
+                    )
+                    db.add(profile)
+                    db.commit()
+                    db.refresh(profile)
+                candidates = [(satyam_user, profile)]
             else:
                 candidates = []
     
     if not candidates:
         booking.provider_id = None
-        booking.status = "REQUESTED"
+        booking.status = "PENDING_PROVIDER_ACCEPTANCE"
         return False
         
     # 4. Score and Rank candidates
@@ -122,7 +136,7 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     
     # Assign the top scored provider
     booking.provider_id = scored_candidates[0][0]
-    booking.status = "ASSIGNED"
+    booking.status = "PENDING_PROVIDER_ACCEPTANCE"
     return True
 
 @router.post("/", response_model=BookingResponse)
@@ -134,34 +148,41 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
             detail="Customer not found."
         )
 
-    # Initialize model
-    booking = Booking(
-        customer_id=dto.customerId,
-        provider_id=dto.providerId,
-        service_type=dto.serviceType,
-        description=dto.description,
-        address=dto.address,
-        is_emergency=dto.isEmergency,
-        labor_cost=dto.laborCost,
-        material_cost=dto.materialCost,
-        total_cost=dto.totalCost,
-        duration_min=dto.durationMin,
-        latitude=dto.latitude,
-        longitude=dto.longitude,
-        status="REQUESTED",
-        rejected_providers="[]",
-        otp=str(random.randint(100000, 999999)) # Pre-generate 6 digit OTP code
-    )
+    try:
+        # Initialize model
+        booking = Booking(
+            customer_id=dto.customerId,
+            provider_id=dto.providerId,
+            service_type=dto.serviceType,
+            description=dto.description,
+            address=dto.address,
+            is_emergency=dto.isEmergency,
+            labor_cost=dto.laborCost,
+            material_cost=dto.materialCost,
+            total_cost=dto.totalCost,
+            duration_min=dto.durationMin,
+            latitude=dto.latitude,
+            longitude=dto.longitude,
+            status="PENDING_PROVIDER_ACCEPTANCE",
+            rejected_providers="[]",
+            otp=str(random.randint(100000, 999999)) # Pre-generate 6 digit OTP code
+        )
 
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
-    
-    # If no provider specified, invoke auto-routing
-    if not booking.provider_id:
-        find_and_assign_provider(booking, db)
+        db.add(booking)
+        db.flush() # Flush to generate primary key ID
+        
+        # If no provider specified, invoke auto-routing
+        if not booking.provider_id:
+            find_and_assign_provider(booking, db)
+            
         db.commit()
         db.refresh(booking)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database transaction failed: {str(e)}"
+        )
         
     # Broadcast websocket events
     await manager.broadcast({
@@ -236,10 +257,10 @@ async def update_booking_status(
             detail="Booking not found."
         )
 
-    if dto.status == "IN_PROGRESS" and booking.status != "IN_PROGRESS":
+    if dto.status == "SERVICE_STARTED" and booking.status not in ["OTP_VERIFIED", "SERVICE_STARTED"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Starting the service requires OTP verification. Please verify the customer OTP instead."
+            detail="Starting the service requires OTP verification. Please verify the customer OTP first."
         )
 
     booking.status = dto.status
@@ -263,7 +284,12 @@ async def update_booking_status(
         "eta_minutes": booking.eta_minutes
     })
     
-    if booking.status == "ARRIVED":
+    if booking.status == "ON_THE_WAY":
+        await manager.broadcast({
+            "event": "provider_departed",
+            "booking_id": str(booking.id)
+        })
+    elif booking.status == "ARRIVED":
         await manager.broadcast({
             "event": "provider_arrived",
             "booking_id": str(booking.id)
@@ -291,7 +317,7 @@ async def accept_booking(
     if current_user.role == "PROVIDER":
         booking.provider_id = current_user.id
         
-    booking.status = "ON_THE_WAY"
+    booking.status = "ACCEPTED"
     if not booking.otp:
         booking.otp = str(random.randint(100000, 999999)) # Generate 6-digit OTP
         
@@ -307,7 +333,7 @@ async def accept_booking(
         "otp": booking.otp
     })
     
-    return {"status": "SUCCESS", "message": "Booking request accepted. Technician en route.", "booking": booking}
+    return {"status": "SUCCESS", "message": "Booking request accepted.", "booking": booking}
 
 @router.post("/{booking_id}/reject")
 async def reject_booking(booking_id: UUID, db: Session = Depends(get_db)):
@@ -378,24 +404,38 @@ async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Se
     if booking.otp != payload.otp:
         raise HTTPException(status_code=400, detail="Incorrect verification OTP code. Please try again.")
         
-    booking.status = "IN_PROGRESS"
+    booking.status = "OTP_VERIFIED"
     booking.otp_verified_at = datetime.utcnow()
     db.commit()
     db.refresh(booking)
     
-    # Broadcast OTP verified / Service Started
+    # Broadcast OTP verified
     await manager.broadcast({
         "event": "otp_verified",
         "booking_id": str(booking.id),
         "status": booking.status
     })
+    
+    return {"status": "SUCCESS", "message": "OTP verified successfully.", "bookingStatus": booking.status}
+
+@router.post("/{booking_id}/start-service")
+async def start_service(booking_id: UUID, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+        
+    booking.status = "SERVICE_STARTED"
+    db.commit()
+    db.refresh(booking)
+    
+    # Broadcast service started
     await manager.broadcast({
         "event": "service_started",
         "booking_id": str(booking.id),
         "status": booking.status
     })
     
-    return {"status": "SUCCESS", "message": "OTP verified successfully. Job has commenced.", "bookingStatus": booking.status}
+    return {"status": "SUCCESS", "message": "Service has started.", "bookingStatus": booking.status}
 
 @router.post("/{booking_id}/confirm-completion")
 async def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get_db)):
@@ -403,10 +443,8 @@ async def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
         
-    booking.status = "COMPLETED"
-    
-    # If booking is already paid (prepaid), release payout to technician
     if booking.payment_status == "PAID":
+        booking.status = "PAYMENT_COMPLETED"
         if booking.provider_id:
             wallet_tx = WalletTransaction(
                 user_id=booking.provider_id,
@@ -415,6 +453,8 @@ async def confirm_booking_completion(booking_id: UUID, db: Session = Depends(get
                 reference=f"Payout for Booking {booking.id}"
             )
             db.add(wallet_tx)
+    else:
+        booking.status = "SERVICE_COMPLETED"
             
     db.commit()
     db.refresh(booking)

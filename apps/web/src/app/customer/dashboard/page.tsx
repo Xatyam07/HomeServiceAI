@@ -63,10 +63,7 @@ const CITIES_LIST = [
 ];
 
 function DashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
-    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
-      ? 'https://homeserviceai-1.onrender.com' 
-      : 'http://localhost:8000');
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, logout, refreshUserProfile, firebaseUser, sendVerification } = useAuth();
@@ -509,7 +506,8 @@ function DashboardContent() {
   const handlePayment = async () => {
     setIsPaying(true);
 
-    const totalToPay = isEmergency ? selectedPro.rate + 150 : selectedPro.rate;
+    const baseRate = selectedPro?.rate || 250.0;
+    const totalToPay = isEmergency ? baseRate + 150 : baseRate;
     const finalBill = Math.max(totalToPay - discountAmount + tipAmount, 0.0);
 
     const bookingPayload = {
@@ -519,7 +517,7 @@ function DashboardContent() {
       description: problemDescription,
       address: address,
       isEmergency: isEmergency,
-      laborCost: selectedPro.rate,
+      laborCost: baseRate,
       materialCost: 0.0,
       totalCost: finalBill,
       durationMin: 60,
@@ -536,7 +534,25 @@ function DashboardContent() {
         },
         body: JSON.stringify(bookingPayload)
       });
-      if (!res.ok) throw new Error("Booking creation failed");
+      if (!res.ok) {
+        let errMsg = "Booking creation failed";
+        try {
+          const errData = await res.json();
+          if (errData && errData.detail) {
+            if (typeof errData.detail === 'string') {
+              errMsg = errData.detail;
+            } else if (Array.isArray(errData.detail)) {
+              errMsg = errData.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ');
+            }
+          }
+        } catch {
+          try {
+            const text = await res.text();
+            if (text) errMsg = text;
+          } catch {}
+        }
+        throw new Error(errMsg);
+      }
       const booking = await res.json();
 
       if (paymentMethod === 'Wallet') {

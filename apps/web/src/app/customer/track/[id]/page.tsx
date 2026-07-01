@@ -22,10 +22,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 export default function TrackBooking() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
-    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
-      ? 'https://homeserviceai-1.onrender.com' 
-      : 'http://localhost:8000');
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
   const { token } = useAuth();
   const params = useParams();
   const bookingId = params?.id;
@@ -85,10 +82,20 @@ export default function TrackBooking() {
   // Timeline status states
   const [currentStatus, setCurrentStatus] = useState<string>('DEPARTED');
   const [eta, setEta] = useState(8);
+  const [etaSeconds, setEtaSeconds] = useState(30);
   const [otp, setOtp] = useState('----');
   const [showOtpVerified, setShowOtpVerified] = useState(false);
   const [jobProgress, setJobProgress] = useState(0);
   const [formattedDate, setFormattedDate] = useState<string>("");
+
+  useEffect(() => {
+    if (currentStatus !== 'ON_THE_WAY') return;
+    setEtaSeconds(30);
+    const secInterval = setInterval(() => {
+      setEtaSeconds(s => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(secInterval);
+  }, [currentStatus]);
 
   useEffect(() => {
     setFormattedDate(new Date().toLocaleDateString());
@@ -133,9 +140,10 @@ export default function TrackBooking() {
     const interval = setInterval(loadBookingData, 4000);
 
     // WebSocket connection
-    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = API_BASE.replace(/^https?:\/\//, '');
-    const wsUrl = `${wsProto}//${wsHost}/api/ws/${bookingId}`;
+    const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${bookingId}`;
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
+      ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${bookingId}`
+      : defaultWsUrl;
     console.log("Customer WebSocket connecting:", wsUrl);
     const socket = new WebSocket(wsUrl);
 
@@ -316,9 +324,14 @@ export default function TrackBooking() {
       });
       if (res.ok) {
         setShowOtpVerified(true);
+        // Also call start service immediately
+        await fetch(`${API_BASE}/api/bookings/${bookingId}/start-service`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         setTimeout(() => {
           setShowOtpVerified(false);
-          setCurrentStatus('IN_PROGRESS');
+          setCurrentStatus('SERVICE_STARTED');
         }, 1500);
       } else {
         const data = await res.json();
@@ -339,7 +352,7 @@ export default function TrackBooking() {
       });
       if (res.ok) {
         alert("Completion confirmed! Payout released to technician.");
-        setCurrentStatus('PAYMENT_SUCCESSFUL');
+        setCurrentStatus('SERVICE_COMPLETED');
       } else {
         const data = await res.json();
         alert(`Failed to confirm: ${data.detail}`);
@@ -367,7 +380,7 @@ export default function TrackBooking() {
         });
         if (res.ok) {
           alert("Payment verified successfully! Outstanding balance cleared.");
-          setCurrentStatus('PAYMENT_SUCCESSFUL');
+          setCurrentStatus('PAYMENT_COMPLETED');
           const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -410,7 +423,7 @@ export default function TrackBooking() {
         });
         if (verifyRes.ok) {
           alert("UPI Payment captured successfully! Outstanding balance cleared.");
-          setCurrentStatus('PAYMENT_SUCCESSFUL');
+          setCurrentStatus('PAYMENT_COMPLETED');
           const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -480,16 +493,23 @@ export default function TrackBooking() {
               <div>
                 <span className="text-[10px] text-slate-500 font-semibold block uppercase">Status</span>
                 <span className="text-xs font-bold text-cyan-400 mt-1 block">
-                  {currentStatus === 'DEPARTED' && 'En Route'}
+                  {currentStatus === 'PENDING_PROVIDER_ACCEPTANCE' && 'Searching...'}
+                  {currentStatus === 'ACCEPTED' && 'Assigned'}
+                  {currentStatus === 'ON_THE_WAY' && 'En Route'}
                   {currentStatus === 'ARRIVED' && 'Arrived'}
-                  {currentStatus === 'IN_PROGRESS' && 'Job Active'}
-                  {currentStatus === 'COMPLETED' && 'Job Finished'}
+                  {currentStatus === 'OTP_VERIFIED' && 'OTP Verified'}
+                  {currentStatus === 'SERVICE_STARTED' && 'Service Started'}
+                  {currentStatus === 'SERVICE_COMPLETED' && 'Service Completed'}
+                  {currentStatus === 'PAYMENT_PENDING' && 'Payment Pending'}
+                  {currentStatus === 'PAYMENT_COMPLETED' && 'Payment Completed'}
+                  {currentStatus === 'REVIEW_PENDING' && 'Review Pending'}
+                  {currentStatus === 'CLOSED' && 'Closed'}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 font-semibold block uppercase">Estimated Arrival</span>
                 <span className="text-xs font-bold text-slate-200 mt-1 block">
-                  {eta > 0 ? `${eta} mins` : 'Arrived'}
+                  {currentStatus === 'ON_THE_WAY' ? `${etaSeconds}s` : (eta > 0 ? `${eta} mins` : 'Arrived')}
                 </span>
               </div>
               <div>
@@ -794,7 +814,7 @@ export default function TrackBooking() {
 
       {/* Premium Review/Feedback Modal */}
       <AnimatePresence>
-        {!reviewClosed && !bookingDetails?.has_review && (currentStatus === 'COMPLETED' || currentStatus === 'PAYMENT_SUCCESSFUL') && bookingDetails?.payment_status === 'PAID' && (
+        {!reviewClosed && !bookingDetails?.has_review && ['COMPLETED', 'PAYMENT_SUCCESSFUL', 'PAYMENT_COMPLETED', 'REVIEW_PENDING'].includes(currentStatus) && bookingDetails?.payment_status === 'PAID' && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}

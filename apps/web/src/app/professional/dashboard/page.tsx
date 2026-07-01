@@ -23,10 +23,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 function ProfessionalDashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
-    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
-      ? 'https://homeserviceai-1.onrender.com' 
-      : 'http://localhost:8000');
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
   const router = useRouter();
   const { user, logout, token, refreshUserProfile } = useAuth();
 
@@ -55,44 +52,44 @@ function ProfessionalDashboardContent() {
   }, [user]);
 
   const handleSwitchTestingCategory = async (cat: string) => {
-    setSwitching(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/testing/switch-category?category=${cat}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      let data: any;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        throw new Error(`Invalid response format from server (non-JSON): ${res.statusText}`);
+    // Optimistically update the UI category state immediately
+    const prevCat = selectedTestingCategory;
+    setSelectedTestingCategory(cat);
+    if (user) {
+      if (!user.profile) {
+        user.profile = {};
       }
-
-      if (res.ok) {
-        setSelectedTestingCategory(cat);
-        if (user) {
-          if (!user.profile) {
-            user.profile = {};
-          }
-          user.profile.category = cat;
-        }
-        await refreshUserProfile();
-        alert(`Switched test category to ${cat}!`);
-      } else {
-        const errMsg = data?.error || data?.detail || `Failed to switch (Status: ${res.status})`;
-        const errDetails = data?.details ? `\nDetails: ${data.details}` : '';
-        alert(`Failed to switch: ${errMsg}${errDetails}`);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(`Error switching category in database.\nMessage: ${err.message || err}`);
-    } finally {
-      setSwitching(false);
+      user.profile.category = cat;
     }
+
+    // Execute the SQL update asynchronously in the background
+    fetch(`${API_BASE}/api/auth/testing/switch-category?category=${cat}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }).then(async (res) => {
+      if (!res.ok) {
+        // Rollback optimistic state on failure
+        setSelectedTestingCategory(prevCat);
+        if (user && user.profile) {
+          user.profile.category = prevCat;
+        }
+        console.error("Failed to persist category change to database");
+      } else {
+        // Save the updated profile category locally to survive page reloads
+        if (user) {
+          localStorage.setItem('hs_user', JSON.stringify(user));
+        }
+      }
+    }).catch((err) => {
+      setSelectedTestingCategory(prevCat);
+      if (user && user.profile) {
+        user.profile.category = prevCat;
+      }
+      console.error("Error during background category switch:", err);
+    });
   };
   
   // Calendar states
@@ -150,6 +147,17 @@ function ProfessionalDashboardContent() {
     return () => clearInterval(interval);
   }, [hasOnTheWay, routePoints]);
 
+  const [etaSeconds, setEtaSeconds] = useState(30);
+
+  useEffect(() => {
+    if (!hasOnTheWay) return;
+    setEtaSeconds(30);
+    const secInterval = setInterval(() => {
+      setEtaSeconds(s => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(secInterval);
+  }, [hasOnTheWay]);
+
   const activeTechCoords = (hasOnTheWay && routePoints[techIndex])
     ? routePoints[techIndex]
     : (user?.profile?.latitude && user?.profile?.longitude)
@@ -185,9 +193,10 @@ function ProfessionalDashboardContent() {
     const interval = setInterval(loadProfessionalJobs, 5000);
 
     if (user && token) {
-      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost = API_BASE.replace(/^https?:\/\//, '');
-      const wsUrl = `${wsProto}//${wsHost}/api/ws/${user.id}`;
+      const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${user.id}`;
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
+        ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${user.id}`
+        : defaultWsUrl;
       console.log("Professional WebSocket connecting:", wsUrl);
       const socket = new WebSocket(wsUrl);
 
@@ -284,7 +293,31 @@ function ProfessionalDashboardContent() {
   const [incomingJob, setIncomingJob] = useState<any | null>(null);
   const [countdown, setCountdown] = useState(25);
 
-
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      oscillator.start();
+      
+      setTimeout(() => {
+        oscillator.frequency.setValueAtTime(1046.5, audioCtx.currentTime);
+      }, 150);
+      
+      setTimeout(() => {
+        oscillator.stop();
+        audioCtx.close();
+      }, 400);
+    } catch (err) {
+      console.error("Audio playback failed:", err);
+    }
+  };
 
   // Countdown clock
   useEffect(() => {
@@ -306,20 +339,25 @@ function ProfessionalDashboardContent() {
   useEffect(() => {
     if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
       const openJob = dbJobs.find(job => 
-        (job.status === 'REQUESTED' || job.status === 'ASSIGNED') &&
+        job.status === 'PENDING_PROVIDER_ACCEPTANCE' &&
         (job.customer_email === '2301641720104@psit.ac.in' || job.provider_id === user.id)
       );
       if (openJob) {
         if (!incomingJob || incomingJob.id !== openJob.id) {
+          playNotificationSound();
           setIncomingJob({
             id: openJob.id,
             customer: openJob.customer_name || "Valued Customer",
+            customerPhoto: openJob.customer_photo || "",
+            city: openJob.city || "Kanpur",
+            address: openJob.address || "Kanpur City Center",
             service: openJob.service_type,
-            address: openJob.address || "Hitec City, Hyderabad",
+            description: openJob.description || "No description provided.",
             distance: "1.5 km away",
             eta: "5 mins travel",
             urgency: "HIGH",
             estimatedFee: `₹${openJob.total_cost}`,
+            paymentMethod: openJob.payment_method || "Wallet",
             isRealBooking: true
           });
           setCountdown(30);
@@ -675,7 +713,7 @@ function ProfessionalDashboardContent() {
                     </div>
 
                     <div className="flex flex-col items-stretch sm:items-end justify-end gap-3 min-w-[200px]">
-                      {(job.status === 'ASSIGNED' || job.status === 'REQUESTED') && (
+                      {(job.status === 'PENDING_PROVIDER_ACCEPTANCE' || job.status === 'ASSIGNED' || job.status === 'REQUESTED') && (
                         <div className="flex gap-2">
                           <button
                             onClick={async () => {
@@ -689,7 +727,7 @@ function ProfessionalDashboardContent() {
                             }}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
                           >
-                            Accept Job
+                            Accept Booking
                           </button>
                           <button
                             onClick={async () => {
@@ -703,7 +741,7 @@ function ProfessionalDashboardContent() {
                             }}
                             className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all"
                           >
-                            Reject
+                            Reject Booking
                           </button>
                         </div>
                       )}
@@ -713,7 +751,7 @@ function ProfessionalDashboardContent() {
                           onClick={() => updateJobStatus(job.id, 'ON_THE_WAY')}
                           className="px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition-all"
                         >
-                          Start Transit (En Route)
+                          Start Navigation
                         </button>
                       )}
 
@@ -728,6 +766,9 @@ function ProfessionalDashboardContent() {
                               routeCoordinates={routePoints}
                               theme="dark"
                             />
+                            <div className="absolute top-2 right-2 px-2.5 py-1 rounded bg-indigo-950/90 border border-indigo-900/40 text-[10px] text-indigo-400 font-bold z-[400] animate-pulse">
+                              ETA: {etaSeconds}s
+                            </div>
                             <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-slate-950/80 border border-slate-800 text-[8px] text-slate-400 z-[400] flex flex-col text-left">
                               <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
                               <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
@@ -758,29 +799,55 @@ function ProfessionalDashboardContent() {
                               onClick={() => handleOtpVerify(job.id)}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
                             >
-                              Verify
+                              Verify OTP
                             </button>
                           </div>
                         </div>
                       )}
 
-                      {job.status === 'IN_PROGRESS' && (
+                      {job.status === 'OTP_VERIFIED' && (
                         <button
-                          onClick={() => updateJobStatus(job.id, 'COMPLETED')}
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
+                          onClick={() => updateJobStatus(job.id, 'SERVICE_STARTED')}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all"
                         >
-                          Complete & Invoice Job
+                          Start Service
                         </button>
                       )}
 
-                      {job.status === 'COMPLETED' && (
-                        <span className="text-[10px] text-slate-500 italic">Awaiting Customer Payout Confirmation...</span>
+                      {job.status === 'SERVICE_STARTED' && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${API_BASE}/api/bookings/${job.id}/confirm-completion`, {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${token}` }
+                              });
+                              if (res.ok) loadProfessionalJobs();
+                            } catch(e) { console.error(e); }
+                          }}
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
+                        >
+                          Complete Service
+                        </button>
                       )}
 
-                      {job.status === 'PAYMENT_SUCCESSFUL' && (
+                      {(job.status === 'SERVICE_COMPLETED' || job.status === 'COMPLETED' || job.status === 'PAYMENT_PENDING') && (
+                        <span className="text-[10px] text-slate-500 italic">Await Payment (Pending Customer Payout)...</span>
+                      )}
+
+                      {(job.status === 'PAYMENT_COMPLETED' || job.status === 'PAYMENT_SUCCESSFUL' || job.status === 'REVIEW_PENDING') && (
+                        <button
+                          onClick={() => updateJobStatus(job.id, 'CLOSED')}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
+                        >
+                          Finish Job
+                        </button>
+                      )}
+
+                      {job.status === 'CLOSED' && (
                         <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
                           <Check size={12} />
-                          <span>Payout Released to Wallet!</span>
+                          <span>Job Completed</span>
                         </span>
                       )}
                     </div>
@@ -1047,63 +1114,88 @@ function ProfessionalDashboardContent() {
       {/* Floating Incoming Job Alert Simulation Banner */}
       <AnimatePresence>
         {incomingJob && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl glass-premium p-6 border-white/10 glow-primary shadow-2xl relative text-left"
+              className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl relative text-left"
             >
-              <div className="flex justify-between items-center pb-3 border-b border-slate-900">
-                <div className="flex items-center gap-2 text-red-400">
-                  <Zap size={18} className="animate-pulse" />
-                  <span className="font-extrabold text-xs tracking-wider uppercase">EMERGENCY JOB DISPATCH</span>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-800/60">
+                <div className="flex items-center gap-2 text-indigo-400">
+                  <Bell size={18} className="animate-bounce" />
+                  <span className="font-extrabold text-xs tracking-wider uppercase">INCOMING BOOKING REQUEST</span>
                 </div>
-                <div className="text-xs font-mono font-bold bg-slate-900 px-2 py-0.5 rounded-md text-cyan-400">
-                  Time: {countdown}s
+                <div className="text-xs font-mono font-bold bg-indigo-950/60 border border-indigo-900/30 px-2 py-0.5 rounded-md text-indigo-400">
+                  {countdown}s left
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3">
-                <div className="flex justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Requested Service</span>
-                    <span className="font-bold text-base text-slate-200">{incomingJob.service}</span>
+              <div className="mt-5 flex flex-col gap-4">
+                {/* Customer Info Row */}
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-800 border border-slate-700">
+                    <img 
+                      src={incomingJob.customerPhoto || "/default-avatar.png"} 
+                      alt={incomingJob.customer}
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://api.dicebear.com/7.x/adventurer/svg?seed=Ramesh'; }}
+                    />
                   </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Estimated Fee</span>
-                    <span className="font-extrabold text-sm text-emerald-400 block mt-0.5">{incomingJob.estimatedFee}</span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-black/30 border border-slate-900 rounded-xl flex flex-col gap-1.5 text-xs text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <User size={12} />
-                    <span>Customer: {incomingJob.customer}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <MapPin size={12} />
-                    <span>Location: {incomingJob.address}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock size={12} />
-                    <span>Travel details: {incomingJob.distance} ({incomingJob.eta})</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Customer</span>
+                    <span className="font-bold text-base text-slate-100">{incomingJob.customer}</span>
+                    <span className="text-[10px] text-slate-400">{incomingJob.city}</span>
                   </div>
                 </div>
 
-                {/* Accept/Reject triggers */}
-                <div className="flex gap-4 mt-3">
+                <div className="p-4 rounded-xl bg-black/45 border border-slate-800/80 flex flex-col gap-3 text-xs text-slate-300">
+                  <div className="flex justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Service Type</span>
+                      <span className="font-bold text-slate-200 mt-0.5 block">{incomingJob.service}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Estimated Price</span>
+                      <span className="font-extrabold text-emerald-400 mt-0.5 block">{incomingJob.estimatedFee}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Problem Description</span>
+                    <p className="text-slate-300 mt-1 leading-relaxed italic">"{incomingJob.description}"</p>
+                  </div>
+
+                  <div className="border-t border-slate-850 pt-2.5 flex flex-col gap-1.5 text-[11px] text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin size={12} className="text-slate-500" />
+                      <span>Address: {incomingJob.address}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="flex items-center gap-1">
+                        <Clock size={12} className="text-slate-500" />
+                        <span>Distance: {incomingJob.distance} ({incomingJob.eta})</span>
+                      </span>
+                      <span className="bg-emerald-950/40 text-emerald-400 border border-emerald-900/30 px-2 py-0.5 rounded text-[9px] font-bold uppercase font-mono">
+                        {incomingJob.paymentMethod}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-4 mt-2">
                   <button
                     onClick={rejectJob}
-                    className="flex-1 py-3 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-xs font-bold transition-all"
+                    className="flex-1 py-3 bg-slate-950 hover:bg-slate-850 text-red-400 hover:text-red-300 border border-slate-800 rounded-xl text-xs font-bold transition-all uppercase tracking-wider"
                   >
-                    Decline Request
+                    ❌ Reject Booking
                   </button>
                   <button
                     onClick={acceptJob}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20"
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-wider"
                   >
-                    Accept Job (Go Live)
+                    ✅ Accept Booking
                   </button>
                 </div>
               </div>

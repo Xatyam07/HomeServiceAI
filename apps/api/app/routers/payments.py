@@ -136,10 +136,10 @@ async def verify_payment(dto: PaymentVerifyRequest, db: Session = Depends(get_db
     if booking:
         booking.payment_status = "PAID"
         # If this was full payment or tip, advance status
-        if record.payment_type in ["FULL_BEFORE", "WALLET"]:
+        if record.payment_type in ["FULL_BEFORE", "WALLET"] and booking.status not in ["SERVICE_COMPLETED", "PAYMENT_PENDING"]:
             booking.status = "ACCEPTED"
-        elif record.payment_type == "FULL_AFTER":
-            booking.status = "COMPLETED"
+        elif record.payment_type == "FULL_AFTER" or (record.payment_type == "WALLET" and booking.status in ["SERVICE_COMPLETED", "PAYMENT_PENDING"]):
+            booking.status = "PAYMENT_COMPLETED"
             # Release credit transaction to provider
             if booking.provider_id:
                 wallet_tx = WalletTransaction(
@@ -316,7 +316,9 @@ async def pay_with_wallet(dto: WalletPayRequest, db: Session = Depends(get_db)):
     
     # Update Booking
     booking.payment_status = "PAID"
-    if booking.status not in ["COMPLETED", "PAYMENT_SUCCESSFUL"]:
+    if booking.status == "SERVICE_COMPLETED":
+        booking.status = "PAYMENT_COMPLETED"
+    elif booking.status not in ["PAYMENT_COMPLETED", "CLOSED"]:
         booking.status = "ACCEPTED"
     
     db.commit()

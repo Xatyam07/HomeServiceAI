@@ -53,6 +53,12 @@ class AIService:
         if not self.enabled:
             return self._mock_diagnosis(description)
 
+        # Short-circuit for simple keywords or short prompts to optimize performance under 800ms
+        words = description.split()
+        if not image_url and (len(words) <= 4 or any(kw in description.lower() for kw in ["leak", "spark", "fuse", "drain", "clog", "short circuit", "sparking", "switch", "tap", "sink", "cooler", "pipe", "toilet", "wiring", "socket", "plug"])):
+            print("Simple prompt/keywords detected: classifying locally to reduce latency.")
+            return self._mock_diagnosis(description)
+
         try:
             from google.genai import types
             

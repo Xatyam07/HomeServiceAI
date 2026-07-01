@@ -94,6 +94,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        const savedUser = localStorage.getItem('hs_user');
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser);
+            if (parsed.email === fbUser.email && (parsed.firebase_uid === fbUser.uid || parsed.id === fbUser.uid)) {
+              setLoading(false);
+              return;
+            }
+          } catch {}
+        }
         await syncWithBackend(fbUser);
       } else {
         setUser(null);

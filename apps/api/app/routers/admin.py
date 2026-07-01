@@ -26,7 +26,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     cities_covered = db.query(ProviderProfile.city).distinct().count()
     
     # Financial metrics
-    completed_bookings = db.query(Booking).filter(Booking.status == "COMPLETED").all()
+    completed_bookings = db.query(Booking).filter(Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])).all()
     monthly_rev = sum(b.total_cost for b in completed_bookings)
     
     # Bookings count today
@@ -34,7 +34,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     today_bookings = db.query(Booking).filter(Booking.created_at >= today_start).count()
 
     # Extra counts
-    active_services = db.query(Booking).filter(Booking.status.in_(["REQUESTED", "ASSIGNED", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "IN_PROGRESS"])).count()
+    active_services = db.query(Booking).filter(Booking.status.in_(["REQUESTED", "ASSIGNED", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "IN_PROGRESS", "OTP_VERIFIED", "SERVICE_STARTED", "PENDING_PROVIDER_ACCEPTANCE"])).count()
     reviews_count = db.query(Review).count()
     fraud_reviews = db.query(Review).filter(Review.is_flagged == True).count()
     
@@ -92,7 +92,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     ).order_by(ProviderProfile.rating.desc()).limit(5).all()
     worker_perf = []
     for w_user, w_prof in top_workers:
-        completed_cnt = db.query(Booking).filter(Booking.provider_id == w_user.id, Booking.status == "COMPLETED").count()
+        completed_cnt = db.query(Booking).filter(Booking.provider_id == w_user.id, Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])).count()
         worker_perf.append({
             "name": w_user.name,
             "category": w_prof.category,
@@ -110,10 +110,10 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     }
 
     booking_trends = {
-        "completed": db.query(Booking).filter(Booking.status == "COMPLETED").count(),
-        "active": db.query(Booking).filter(Booking.status.in_(["ASSIGNED", "IN_PROGRESS", "ACCEPTED"])).count(),
+        "completed": db.query(Booking).filter(Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])).count(),
+        "active": db.query(Booking).filter(Booking.status.in_(["ASSIGNED", "IN_PROGRESS", "ACCEPTED", "ON_THE_WAY", "ARRIVED", "OTP_VERIFIED", "SERVICE_STARTED", "PENDING_PROVIDER_ACCEPTANCE"])).count(),
         "cancelled": db.query(Booking).filter(Booking.status == "CANCELLED").count(),
-        "pending": db.query(Booking).filter(Booking.status == "REQUESTED").count()
+        "pending": db.query(Booking).filter(Booking.status == "PENDING_PROVIDER_ACCEPTANCE").count()
     }
 
     # Dummy Complaints

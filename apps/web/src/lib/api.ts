@@ -1,8 +1,6 @@
 // Centralized API Client Layer for HomeSphere AI
 
-const DEFAULT_API_URL = typeof window !== "undefined" && window.location.hostname.includes("vercel.app")
-  ? "https://homeserviceai-1.onrender.com"
-  : "http://localhost:8000";
+const DEFAULT_API_URL = "https://homeserviceai-1.onrender.com";
 
 interface RequestOptions extends RequestInit {
   timeout?: number;

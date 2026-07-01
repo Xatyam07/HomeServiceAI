@@ -24,10 +24,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 function AdminDashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
-    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
-      ? 'https://homeserviceai-1.onrender.com' 
-      : 'http://localhost:8000');
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
   const router = useRouter();
   const { user, token, logout, refreshUserProfile } = useAuth();
 

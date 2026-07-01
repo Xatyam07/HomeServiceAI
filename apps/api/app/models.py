@@ -38,7 +38,7 @@ class ProviderProfile(Base):
     __tablename__ = "provider_profiles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
     category = Column(String, nullable=False) # Electrician, Plumber, AC Repair, etc.
     experience_yrs = Column(Integer, default=0)
     rating = Column(Float, default=5.0)
@@ -83,8 +83,8 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    provider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     service_type = Column(String, nullable=False)
     description = Column(String, nullable=False)
     status = Column(String, default="REQUESTED") # REQUESTED, ASSIGNED, ACCEPTED, ON_THE_WAY, ARRIVED, IN_PROGRESS, COMPLETED, PAYMENT_SUCCESSFUL
@@ -121,6 +121,10 @@ class Booking(Base):
         return self.customer.email if self.customer else None
 
     @property
+    def customer_name(self):
+        return self.customer.name if self.customer else None
+
+    @property
     def has_review(self):
         return self.review is not None
 
@@ -136,9 +140,9 @@ class Review(Base):
     __tablename__ = "reviews"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), unique=True, nullable=False)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    provider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     rating = Column(Integer, default=5)
     comment = Column(String, nullable=False)
     is_flagged = Column(Boolean, default=False)
