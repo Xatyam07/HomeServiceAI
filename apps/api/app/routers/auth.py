@@ -182,7 +182,7 @@ def switch_category(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.email != "xatyammishra07@gmail.com":
+    if current_user.email.lower() != "xatyammishra07@gmail.com":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Testing mode is only available for the default test professional account."
