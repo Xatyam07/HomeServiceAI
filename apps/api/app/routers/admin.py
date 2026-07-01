@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.dependencies import require_admin
 from pydantic import BaseModel
 import random
+from app.timezone_util import get_ist_time
 
 router = APIRouter()
 
@@ -30,7 +31,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     monthly_rev = sum(b.total_cost for b in completed_bookings)
     
     # Bookings count today
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = get_ist_time().replace(hour=0, minute=0, second=0, microsecond=0)
     today_bookings = db.query(Booking).filter(Booking.created_at >= today_start).count()
 
     # Extra counts
@@ -313,9 +314,44 @@ def get_active_bookings(db: Session = Depends(get_db), current_user: User = Depe
     ]
     bookings = db.query(Booking).filter(Booking.status.in_(active_statuses)).order_by(Booking.created_at.desc()).all()
     results = []
+    
+    city_to_state = {
+        "Kanpur": ("Kanpur", "Uttar Pradesh"),
+        "Lucknow": ("Lucknow", "Uttar Pradesh"),
+        "Varanasi": ("Varanasi", "Uttar Pradesh"),
+        "Prayagraj": ("Prayagraj", "Uttar Pradesh"),
+        "Delhi": ("Delhi", "Delhi NCR"),
+        "Noida": ("Noida", "Delhi NCR"),
+        "Ghaziabad": ("Ghaziabad", "Delhi NCR"),
+        "Gurugram": ("Gurugram", "Delhi NCR"),
+        "Faridabad": ("Faridabad", "Delhi NCR"),
+        "Mumbai": ("Mumbai", "Maharashtra"),
+        "Pune": ("Pune", "Maharashtra"),
+        "Nagpur": ("Nagpur", "Maharashtra"),
+        "Nashik": ("Nashik", "Maharashtra"),
+        "Ahmedabad": ("Ahmedabad", "Gujarat"),
+        "Surat": ("Surat", "Gujarat"),
+        "Vadodara": ("Vadodara", "Gujarat"),
+        "Jaipur": ("Jaipur", "Rajasthan"),
+        "Jodhpur": ("Jodhpur", "Rajasthan"),
+        "Udaipur": ("Udaipur", "Rajasthan"),
+        "Bhopal": ("Bhopal", "Madhya Pradesh"),
+    }
+    
     for b in bookings:
         customer = db.query(User).filter(User.id == b.customer_id).first()
         provider = db.query(User).filter(User.id == b.provider_id).first() if b.provider_id else None
+        
+        # Resolve city and state
+        addr = b.address.lower() if b.address else ""
+        resolved_city = "Kanpur"
+        resolved_state = "Uttar Pradesh"
+        for c, (ct, st) in city_to_state.items():
+            if c.lower() in addr:
+                resolved_city = ct
+                resolved_state = st
+                break
+                
         results.append({
             "id": str(b.id),
             "customer_name": customer.name if customer else "Unknown",
@@ -331,7 +367,9 @@ def get_active_bookings(db: Session = Depends(get_db), current_user: User = Depe
             "longitude": b.longitude,
             "tech_latitude": b.tech_latitude,
             "tech_longitude": b.tech_longitude,
-            "eta_minutes": b.eta_minutes
+            "eta_minutes": b.eta_minutes,
+            "city": resolved_city,
+            "state": resolved_state
         })
     return results
 
@@ -346,7 +384,7 @@ def get_booking_history(
 ):
     query = db.query(Booking).filter(Booking.status.in_(["COMPLETED", "CLOSED", "CANCELLED"]))
     
-    now = datetime.utcnow()
+    now = get_ist_time()
     if range_filter == "today":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         query = query.filter(Booking.created_at >= start)

@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Foreig
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.timezone_util import get_ist_time
 
 class User(Base):
     __tablename__ = "users"
@@ -16,13 +17,13 @@ class User(Base):
     status = Column(String, default="ACTIVE")  # ACTIVE, PENDING, APPROVED, REJECTED, SUSPENDED
     firebase_uid = Column(String, unique=True, index=True, nullable=False)
     profile_photo = Column(String, nullable=True)
-    last_login = Column(DateTime, default=datetime.utcnow, nullable=True)
+    last_login = Column(DateTime, default=get_ist_time, nullable=True)
     saved_addresses = Column(String, nullable=True)  # JSON-serialized list of addresses
     favourite_providers = Column(String, nullable=True)  # JSON-serialized list of UUIDs
     payment_methods = Column(String, nullable=True)  # JSON-serialized list of methods
     emergency_contacts = Column(String, nullable=True)  # JSON-serialized list of contacts
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
+    updated_at = Column(DateTime, default=get_ist_time, onupdate=get_ist_time)
 
     # Relationships
     profile = relationship("ProviderProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -75,7 +76,7 @@ class ProviderProfile(Base):
     longitude = Column(Float, nullable=True)
     is_premium = Column(Boolean, default=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="profile")
@@ -89,7 +90,7 @@ class Booking(Base):
     service_type = Column(String, nullable=False)
     description = Column(String, nullable=False)
     status = Column(String, default="REQUESTED") # REQUESTED, ASSIGNED, ACCEPTED, ON_THE_WAY, ARRIVED, IN_PROGRESS, COMPLETED, PAYMENT_SUCCESSFUL
-    scheduled_time = Column(DateTime, default=datetime.utcnow)
+    scheduled_time = Column(DateTime, default=get_ist_time)
     is_emergency = Column(Boolean, default=False)
     
     # Financial breakdown
@@ -110,8 +111,8 @@ class Booking(Base):
     otp = Column(String, nullable=True)
     otp_verified_at = Column(DateTime, nullable=True)
     rejected_providers = Column(String, default="[]") # JSON list of provider IDs who rejected
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
+    updated_at = Column(DateTime, default=get_ist_time, onupdate=get_ist_time)
 
     @property
     def customer_name(self):
@@ -148,7 +149,7 @@ class Review(Base):
     comment = Column(String, nullable=False)
     is_flagged = Column(Boolean, default=False)
     ai_sentiment = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     booking = relationship("Booking", back_populates="review")
@@ -162,7 +163,7 @@ class Message(Base):
     booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     content = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     booking = relationship("Booking", back_populates="messages")
@@ -176,7 +177,7 @@ class Invoice(Base):
     pdf_url = Column(String, nullable=True)
     gst_amount = Column(Float, default=0.0)
     total_paid = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     booking = relationship("Booking", back_populates="invoice")
@@ -189,7 +190,7 @@ class WalletTransaction(Base):
     amount = Column(Float, nullable=False)
     type = Column(String, nullable=False) # CREDIT, DEBIT
     reference = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="wallet_transactions")
@@ -209,7 +210,7 @@ class PaymentRecord(Base):
     coupon_code = Column(String, nullable=True)
     discount_amount = Column(Float, default=0.0)
     tip_amount = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_time)
 
     # Relationships
     user = relationship("User", back_populates="payment_records")

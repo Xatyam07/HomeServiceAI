@@ -542,7 +542,7 @@ function DashboardContent() {
             if (typeof errData.detail === 'string') {
               errMsg = errData.detail;
             } else if (Array.isArray(errData.detail)) {
-              errMsg = errData.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ');
+              errMsg = errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ');
             }
           }
         } catch {

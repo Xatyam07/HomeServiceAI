@@ -7,6 +7,7 @@ from app.firebase import firebase_service
 from datetime import datetime
 from app.dependencies import get_current_user
 from app.security import create_access_token, create_refresh_token
+from app.timezone_util import get_ist_time
 
 router = APIRouter()
 
@@ -52,7 +53,7 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
             status=account_status,
             firebase_uid=uid,
             profile_photo=picture,
-            last_login=datetime.utcnow()
+            last_login=get_ist_time()
         )
         db.add(db_user)
         db.commit()
@@ -72,7 +73,7 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
                 db.commit()
     else:
         # Update login details and sync firebase_uid
-        db_user.last_login = datetime.utcnow()
+        db_user.last_login = get_ist_time()
         db_user.firebase_uid = uid
         if db_user.email != email:
             db_user.email = email

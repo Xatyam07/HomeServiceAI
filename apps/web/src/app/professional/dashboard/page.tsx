@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { formatToIST, formatToISTFull } from '@/utils/timezone';
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -22,6 +23,27 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
     </div>
   ),
 });
+
+const LiveTimer = ({ createdAt }: { createdAt: string }) => {
+  const [elapsed, setElapsed] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const diffMs = new Date().getTime() - new Date(createdAt).getTime();
+      if (diffMs < 0) {
+        setElapsed("00:00");
+        return;
+      }
+      const diffSecs = Math.floor(diffMs / 1000);
+      const mins = Math.floor(diffSecs / 60);
+      const secs = diffSecs % 60;
+      setElapsed(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [createdAt]);
+  return <span className="font-mono text-cyan-400 font-bold">{elapsed}</span>;
+};
 
 function ProviderDashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
@@ -96,6 +118,7 @@ function ProviderDashboardContent() {
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'wallet' | 'settings' | 'performance'>('home');
+  const [jobsSubTab, setJobsSubTab] = useState<'NEW' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'OTP_PENDING' | 'SERVICE_RUNNING' | 'PAYMENT_PENDING' | 'COMPLETED' | 'CANCELLED'>('NEW');
   const [dbJobs, setDbJobs] = useState<any[]>([]);
 
   // Simulated en-route coordinates map tracker
@@ -148,16 +171,59 @@ function ProviderDashboardContent() {
     return () => clearInterval(interval);
   }, [hasOnTheWay, routePoints]);
 
-  const [etaSeconds, setEtaSeconds] = useState(30);
+  const [etaSeconds, setEtaSeconds] = useState(15);
 
   useEffect(() => {
-    if (!hasOnTheWay) return;
-    setEtaSeconds(30);
+    const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
+    if (!activeWayJob) return;
+    setEtaSeconds(15);
     const secInterval = setInterval(() => {
-      setEtaSeconds(s => Math.max(0, s - 1));
+      setEtaSeconds(s => {
+        if (s <= 1) {
+          clearInterval(secInterval);
+          updateJobStatus(activeWayJob.id, 'ARRIVED');
+          return 0;
+        }
+        return s - 1;
+      });
     }, 1000);
     return () => clearInterval(secInterval);
-  }, [hasOnTheWay]);
+  }, [dbJobs.some(j => j.status === 'ON_THE_WAY')]);
+
+  // Real GPS watch loop for real professionals
+  useEffect(() => {
+    const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
+    if (!activeWayJob || user?.email?.toLowerCase().includes("homesphere")) return;
+
+    if (navigator.geolocation) {
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log("Real GPS Tech coordinates retrieved:", latitude, longitude);
+          
+          fetch(`${API_BASE}/api/bookings/${activeWayJob.id}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              status: 'ON_THE_WAY',
+              techLat: latitude,
+              techLng: longitude,
+              etaMinutes: 5
+            })
+          }).catch(console.error);
+        },
+        (error) => {
+          console.error("GPS tracking error:", error);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+
+      return () => navigator.geolocation.clearWatch(watchId);
+    }
+  }, [dbJobs.some(j => j.status === 'ON_THE_WAY'), user]);
 
   const activeTechCoords = (hasOnTheWay && routePoints[techIndex])
     ? routePoints[techIndex]
@@ -205,6 +271,27 @@ function ProviderDashboardContent() {
         try {
           const msg = JSON.parse(event.data);
           console.log("Professional received event:", msg);
+          
+          if (msg.event === "booking_popup" && msg.provider_id === user.id) {
+            playNotificationSound();
+            setIncomingJob({
+              id: msg.booking_id,
+              customer: msg.customer_name || "Valued Customer",
+              customerPhoto: "",
+              city: "Kanpur",
+              address: msg.address || "Kanpur Center",
+              service: msg.service_type,
+              description: msg.description || "No description provided.",
+              distance: "1.5 km away",
+              eta: "5 mins travel",
+              urgency: "HIGH",
+              estimatedFee: `₹${msg.total_cost}`,
+              paymentMethod: "Wallet",
+              isRealBooking: true
+            });
+            setCountdown(15);
+          }
+          
           if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed") {
             loadProfessionalJobs();
           }
@@ -384,6 +471,7 @@ function ProviderDashboardContent() {
           });
           if (res.ok) {
             alert("Live Booking Accepted! Heading to target address.");
+            await updateJobStatus(incomingJob.id, 'ON_THE_WAY');
             loadProfessionalJobs();
           } else {
             const data = await res.json();
@@ -687,14 +775,84 @@ function ProviderDashboardContent() {
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{dbJobs.length} active allocations</span>
             </div>
 
+            {/* Sub-Tabs Navigation */}
+            <div className="flex gap-2 flex-wrap mb-4 border-b border-slate-900 pb-3">
+              {[
+                { id: 'NEW', label: 'New Requests' },
+                { id: 'ACCEPTED', label: 'Accepted' },
+                { id: 'ON_THE_WAY', label: 'On The Way' },
+                { id: 'ARRIVED', label: 'Arrived' },
+                { id: 'OTP_PENDING', label: 'OTP Pending' },
+                { id: 'SERVICE_RUNNING', label: 'Service Running' },
+                { id: 'PAYMENT_PENDING', label: 'Payment Pending' },
+                { id: 'COMPLETED', label: 'Completed' },
+                { id: 'CANCELLED', label: 'Cancelled' }
+              ].map((sub) => {
+                const count = dbJobs.filter(j => {
+                  if (sub.id === 'NEW') return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(j.status);
+                  if (sub.id === 'ACCEPTED') return j.status === 'ACCEPTED';
+                  if (sub.id === 'ON_THE_WAY') return j.status === 'ON_THE_WAY';
+                  if (sub.id === 'ARRIVED') return j.status === 'ARRIVED';
+                  if (sub.id === 'OTP_PENDING') return j.status === 'ARRIVED';
+                  if (sub.id === 'SERVICE_RUNNING') return ['SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status);
+                  if (sub.id === 'PAYMENT_PENDING') return ['SERVICE_COMPLETED', 'PAYMENT_PENDING'].includes(j.status);
+                  if (sub.id === 'COMPLETED') return ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED'].includes(j.status);
+                  if (sub.id === 'CANCELLED') return ['CANCELLED', 'REJECTED'].includes(j.status);
+                  return false;
+                }).length;
+                
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => setJobsSubTab(sub.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border transition-all ${
+                      jobsSubTab === sub.id
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {sub.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="flex flex-col gap-4">
-              {dbJobs.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 text-xs flex flex-col items-center gap-2">
-                  <Wrench size={24} className="opacity-40" />
-                  <span>No active allocations located. Simulated customer bookings will appear here.</span>
-                </div>
-              ) : (
-                dbJobs.map((job) => (
+              {(() => {
+                const filteredJobs = dbJobs.filter(job => {
+                  switch (jobsSubTab) {
+                    case 'NEW':
+                      return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(job.status);
+                    case 'ACCEPTED':
+                      return job.status === 'ACCEPTED';
+                    case 'ON_THE_WAY':
+                      return job.status === 'ON_THE_WAY';
+                    case 'ARRIVED':
+                    case 'OTP_PENDING':
+                      return job.status === 'ARRIVED';
+                    case 'SERVICE_RUNNING':
+                      return ['SERVICE_STARTED', 'IN_PROGRESS'].includes(job.status);
+                    case 'PAYMENT_PENDING':
+                      return ['SERVICE_COMPLETED', 'PAYMENT_PENDING'].includes(job.status);
+                    case 'COMPLETED':
+                      return ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED'].includes(job.status);
+                    case 'CANCELLED':
+                      return ['CANCELLED', 'REJECTED'].includes(job.status);
+                    default:
+                      return true;
+                  }
+                });
+
+                if (filteredJobs.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-slate-500 text-xs flex flex-col items-center gap-2">
+                      <Wrench size={24} className="opacity-40" />
+                      <span>No jobs found in this section.</span>
+                    </div>
+                  );
+                }
+
+                return filteredJobs.map((job) => (
                   <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                     <div className="flex gap-4 items-start text-left">
                       <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mt-1">
@@ -723,7 +881,10 @@ function ProviderDashboardContent() {
                                   method: 'POST',
                                   headers: { 'Authorization': `Bearer ${token}` }
                                 });
-                                if (res.ok) loadProfessionalJobs();
+                                if (res.ok) {
+                                  await updateJobStatus(job.id, 'ON_THE_WAY');
+                                  loadProfessionalJobs();
+                                }
                               } catch(e) { console.error(e); }
                             }}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
@@ -806,15 +967,6 @@ function ProviderDashboardContent() {
                         </div>
                       )}
 
-                      {job.status === 'OTP_VERIFIED' && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'SERVICE_STARTED')}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          Start Service
-                        </button>
-                      )}
-
                       {job.status === 'SERVICE_STARTED' && (
                         <button
                           onClick={async () => {
@@ -832,20 +984,11 @@ function ProviderDashboardContent() {
                         </button>
                       )}
 
-                      {(job.status === 'SERVICE_COMPLETED' || job.status === 'COMPLETED' || job.status === 'PAYMENT_PENDING') && (
+                      {(job.status === 'SERVICE_COMPLETED' || job.status === 'PAYMENT_PENDING') && (
                         <span className="text-[10px] text-slate-500 italic">Await Payment (Pending Customer Payout)...</span>
                       )}
 
-                      {(job.status === 'PAYMENT_COMPLETED' || job.status === 'PAYMENT_SUCCESSFUL' || job.status === 'REVIEW_PENDING') && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'CLOSED')}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          Finish Job
-                        </button>
-                      )}
-
-                      {job.status === 'CLOSED' && (
+                      {(job.status === 'PAYMENT_COMPLETED' || job.status === 'COMPLETED' || job.status === 'CLOSED') && (
                         <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
                           <Check size={12} />
                           <span>Job Completed</span>
@@ -853,8 +996,8 @@ function ProviderDashboardContent() {
                       )}
                     </div>
                   </div>
-                ))
-              )}
+                ));
+              })()}
             </div>
           </div>
         )}
@@ -1506,10 +1649,10 @@ function AdminManagementDashboard() {
   }, [selectedBooking]);
 
   const activeTechTrackingCoords = (selectedBooking && routePoints.length > 0 && routePoints[techIndex])
-    ? routePoints[techIndex]
+    ? routePoints[techIndex] as [number, number]
     : selectedBooking
-      ? [selectedBooking.tech_latitude || selectedBooking.latitude, selectedBooking.tech_longitude || selectedBooking.longitude] as [number, number]
-      : [26.4499, 80.3319];
+      ? [selectedBooking.tech_latitude || selectedBooking.latitude || 26.4499, selectedBooking.tech_longitude || selectedBooking.longitude || 80.3319] as [number, number]
+      : [26.4499, 80.3319] as [number, number];
 
   return (
     <div className="min-h-screen text-slate-100 flex flex-col pt-6 px-6 relative bg-slate-950 font-sans">
@@ -1830,25 +1973,27 @@ function AdminManagementDashboard() {
         {activeTab === 'live' && (
           <div className="flex-1 flex flex-col">
             
-            <div className="rounded-xl border border-white/5 bg-slate-900/10 overflow-x-auto min-h-[300px]">
+            <div className="rounded-xl border border-white/5 bg-slate-900/10 overflow-x-auto min-h-[300px] text-left">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-white/5 bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[9px] font-bold">
                     <th className="p-3.5">Booking ID</th>
                     <th className="p-3.5">Customer</th>
                     <th className="p-3.5">Professional</th>
-                    <th className="p-3.5">Service Role</th>
-                    <th className="p-3.5">Live Status</th>
-                    <th className="p-3.5">Payment</th>
-                    <th className="p-3.5">Created At</th>
-                    <th className="p-3.5">Telemetry ETA</th>
-                    <th className="p-3.5">Actions</th>
+                    <th className="p-3.5">Role</th>
+                    <th className="p-3.5">State</th>
+                    <th className="p-3.5">City</th>
+                    <th className="p-3.5">Booking Time</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Payment Status</th>
+                    <th className="p-3.5">Live Timer</th>
+                    <th className="p-3.5">Track</th>
                   </tr>
                 </thead>
                 <tbody>
                   {activeBookings.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-10 text-slate-500 text-xs">
+                      <td colSpan={11} className="text-center py-10 text-slate-500 text-xs">
                         No active service bookings currently dispatching.
                       </td>
                     </tr>
@@ -1856,7 +2001,7 @@ function AdminManagementDashboard() {
                     activeBookings.map((b) => {
                       return (
                         <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.01] transition-colors">
-                          <td className="p-3 font-bold text-indigo-400">#HS-{b.id.substring(0, 8)}</td>
+                          <td className="p-3 font-mono font-bold text-indigo-450">#HS-{b.id.substring(0, 8)}</td>
                           <td className="p-3">
                             <div className="flex flex-col text-left">
                               <span className="font-bold text-white">{b.customer_name}</span>
@@ -1870,6 +2015,11 @@ function AdminManagementDashboard() {
                             <span className="px-2 py-1 rounded bg-slate-800 text-slate-300 font-semibold border border-slate-700/30">
                               {b.service_type}
                             </span>
+                          </td>
+                          <td className="p-3 text-slate-300">{b.state || 'Uttar Pradesh'}</td>
+                          <td className="p-3 text-slate-300">{b.city || 'Kanpur'}</td>
+                          <td className="p-3 text-slate-400">
+                            {formatToIST(b.created_at)}
                           </td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -1888,9 +2038,8 @@ function AdminManagementDashboard() {
                               {b.payment_status}
                             </span>
                           </td>
-                          <td className="p-3 text-slate-400">{new Date(b.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                          <td className="p-3 font-semibold text-slate-200">
-                            {b.status === 'ON_THE_WAY' ? `${b.eta_minutes || 0} mins` : '—'}
+                          <td className="p-3">
+                            <LiveTimer createdAt={b.created_at} />
                           </td>
                           <td className="p-3">
                             <button
@@ -1898,9 +2047,9 @@ function AdminManagementDashboard() {
                                 setSelectedBooking(b);
                                 setShowTrackModal(true);
                               }}
-                              className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold font-sans transition-colors"
+                              className="px-2.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold font-sans transition-colors"
                             >
-                              Track Live
+                              Track
                             </button>
                           </td>
                         </tr>
@@ -1980,7 +2129,7 @@ function AdminManagementDashboard() {
                           </span>
                         </td>
                         <td className="p-3 text-slate-400">{b.payment_status}</td>
-                        <td className="p-3 text-slate-400">{new Date(b.created_at).toLocaleDateString()}</td>
+                        <td className="p-3 text-slate-400">{formatToISTFull(b.created_at)}</td>
                         <td className="p-3 font-bold text-white">₹{b.total_cost}</td>
                       </tr>
                     ))

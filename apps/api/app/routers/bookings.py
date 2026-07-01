@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel
 from app.websocket import manager
+from app.timezone_util import get_ist_time
 
 class OtpVerifyRequest(BaseModel):
     otp: str
@@ -235,7 +236,7 @@ async def get_bookings(
     if role == "PROVIDER":
         is_master_sim = user.email.lower() == "xatyammishra07@gmail.com"
         if is_master_sim:
-            dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.com")).all()
+            dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.%")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
             return db.query(Booking).options(joinedload(Booking.review)).filter(
                 (Booking.provider_id == user_uuid) | 
@@ -404,8 +405,8 @@ async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Se
     if booking.otp != payload.otp:
         raise HTTPException(status_code=400, detail="Incorrect verification OTP code. Please try again.")
         
-    booking.status = "OTP_VERIFIED"
-    booking.otp_verified_at = datetime.utcnow()
+    booking.status = "SERVICE_STARTED"
+    booking.otp_verified_at = get_ist_time()
     db.commit()
     db.refresh(booking)
     

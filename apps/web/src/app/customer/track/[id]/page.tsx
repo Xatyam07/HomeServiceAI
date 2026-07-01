@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useParams } from 'next/navigation';
 import { useTheme } from '@/app/theme-provider';
 import dynamic from 'next/dynamic';
+import { formatToIST, formatToISTFull } from '@/utils/timezone';
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
   ssr: false,
@@ -98,7 +99,7 @@ export default function TrackBooking() {
   }, [currentStatus]);
 
   useEffect(() => {
-    setFormattedDate(new Date().toLocaleDateString());
+    setFormattedDate(formatToISTFull(new Date()));
   }, []);
 
   useEffect(() => {
@@ -362,7 +363,7 @@ export default function TrackBooking() {
     }
   };
 
-  const payOutstandingInvoice = async (method: 'Wallet' | 'UPI') => {
+  const payOutstandingInvoice = async (method: 'Wallet' | 'UPI' | 'Razorpay' | 'Cash') => {
     if (!bookingDetails) return;
     try {
       if (method === 'Wallet') {
@@ -391,7 +392,29 @@ export default function TrackBooking() {
           const err = await res.json();
           alert(`Wallet payment failed: ${err.detail}`);
         }
+      } else if (method === 'Cash') {
+        const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ status: 'PAYMENT_COMPLETED' })
+        });
+        if (res.ok) {
+          alert("Cash payment confirmed! Outstanding balance cleared.");
+          setCurrentStatus('PAYMENT_COMPLETED');
+          const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (reloadRes.ok) {
+            setBookingDetails(await reloadRes.json());
+          }
+        } else {
+          alert("Failed to confirm Cash payment.");
+        }
       } else {
+        // UPI or Razorpay
         const orderRes = await fetch(`${API_BASE}/api/payments/order`, {
           method: 'POST',
           headers: {
@@ -422,7 +445,7 @@ export default function TrackBooking() {
           })
         });
         if (verifyRes.ok) {
-          alert("UPI Payment captured successfully! Outstanding balance cleared.");
+          alert(`${method} Payment captured successfully! Outstanding balance cleared.`);
           setCurrentStatus('PAYMENT_COMPLETED');
           const reloadRes = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -431,7 +454,7 @@ export default function TrackBooking() {
             setBookingDetails(await reloadRes.json());
           }
         } else {
-          alert("UPI verification failed.");
+          alert(`${method} verification failed.`);
         }
       }
     } catch (err) {
@@ -533,18 +556,30 @@ export default function TrackBooking() {
                 <p className="text-xs text-slate-300 leading-relaxed font-semibold">
                   Your service has been completed successfully. Please select a payment option to clear the invoice outstanding balance.
                 </p>
-                <div className="flex gap-3 mt-1">
+                <div className="grid grid-cols-2 gap-3 mt-1">
                   <button
                     onClick={() => payOutstandingInvoice('Wallet')}
-                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs text-slate-200 border border-slate-800 rounded-xl font-bold transition-all cursor-pointer"
+                    className="py-2.5 bg-slate-900 hover:bg-slate-850 text-xs text-slate-200 border border-slate-800 rounded-xl font-bold transition-all cursor-pointer text-center"
                   >
-                    Pay via Wallet
+                    Wallet
                   </button>
                   <button
                     onClick={() => payOutstandingInvoice('UPI')}
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-xs text-white rounded-xl font-bold transition-all cursor-pointer shadow-lg shadow-emerald-600/10"
+                    className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-xs text-white rounded-xl font-bold transition-all cursor-pointer text-center"
                   >
-                    Pay via UPI (Razorpay)
+                    UPI
+                  </button>
+                  <button
+                    onClick={() => payOutstandingInvoice('Razorpay')}
+                    className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-xs text-white rounded-xl font-bold transition-all cursor-pointer text-center"
+                  >
+                    Razorpay
+                  </button>
+                  <button
+                    onClick={() => payOutstandingInvoice('Cash')}
+                    className="py-2.5 bg-amber-600 hover:bg-amber-500 text-xs text-white rounded-xl font-bold transition-all cursor-pointer text-center"
+                  >
+                    Cash
                   </button>
                 </div>
               </div>
