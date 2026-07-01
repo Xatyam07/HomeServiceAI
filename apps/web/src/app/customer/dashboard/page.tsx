@@ -63,7 +63,10 @@ const CITIES_LIST = [
 ];
 
 function DashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 
+    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
+      ? 'https://homeserviceai-1.onrender.com' 
+      : 'http://localhost:8000');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, logout, refreshUserProfile, firebaseUser, sendVerification } = useAuth();
