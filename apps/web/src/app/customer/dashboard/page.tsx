@@ -1480,14 +1480,20 @@ function DashboardContent() {
                       <span className="text-[10px] text-slate-500">{b.address}</span>
                       <div className="mt-2 flex items-center gap-3">
                         <span className="font-bold text-indigo-400">Total: ₹{b.total_cost}</span>
-                        <span className="text-[9px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono uppercase font-bold">
-                          {b.status}
+                        <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-mono uppercase font-bold ${
+                          ['COMPLETED', 'PAYMENT_COMPLETED', 'PAYMENT_SUCCESSFUL', 'CLOSED'].includes(b.status)
+                            ? 'bg-emerald-950/60 text-emerald-450 border border-emerald-900/30'
+                            : b.status === 'CANCELLED'
+                              ? 'bg-red-950/60 text-red-450 border border-red-900/30'
+                              : 'bg-slate-900 border border-slate-800 text-slate-400'
+                        }`}>
+                          {['COMPLETED', 'PAYMENT_COMPLETED', 'PAYMENT_SUCCESSFUL', 'CLOSED'].includes(b.status) ? 'Booking Completed' : b.status}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {b.status !== 'PAYMENT_SUCCESSFUL' && b.status !== 'CANCELLED' && b.status !== 'COMPLETED' && (
+                      {!['COMPLETED', 'PAYMENT_COMPLETED', 'PAYMENT_SUCCESSFUL', 'CLOSED', 'CANCELLED'].includes(b.status) && (
                         <>
                           <Link
                             href={`/customer/track/${b.id}`}
