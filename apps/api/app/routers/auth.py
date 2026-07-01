@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.schemas import UserVerifyToken, UserCreate, UserResponse, TokenResponse
 from app.models import User, ProviderProfile
@@ -29,7 +29,7 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
         )
 
     # 2. Check if user already registered in PostgreSQL by UID or Email
-    db_user = db.query(User).filter((User.firebase_uid == uid) | (User.email == email)).first()
+    db_user = db.query(User).options(joinedload(User.profile)).filter((User.firebase_uid == uid) | (User.email == email)).first()
     
     if not db_user:
         # Enforce role mapping rules

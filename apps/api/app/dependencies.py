@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import User
 from app.security import verify_token
@@ -13,7 +13,7 @@ def get_current_user(
 ) -> User:
     token = credentials.credentials
     if token == "mock-jwt-token-101":
-        user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+        user = db.query(User).options(joinedload(User.profile)).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
         if user:
             return user
             
@@ -21,7 +21,7 @@ def get_current_user(
         parts = token.split(":")
         if len(parts) >= 3:
             email = parts[1]
-            user = db.query(User).filter(User.email.ilike(email)).first()
+            user = db.query(User).options(joinedload(User.profile)).filter(User.email.ilike(email)).first()
             if user:
                 return user
                 
@@ -40,7 +40,7 @@ def get_current_user(
             detail="Token payload is missing subject ID."
         )
         
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).options(joinedload(User.profile)).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
