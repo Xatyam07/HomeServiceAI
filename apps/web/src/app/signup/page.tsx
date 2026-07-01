@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 export default function SignUpPage() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const { signupWithEmail, loginWithGoogle } = useAuth();
   const router = useRouter();
 
@@ -59,7 +60,7 @@ export default function SignUpPage() {
     formData.append("file", file);
 
     try {
-      const response = await fetch('http://localhost:8000/api/uploads/', {
+      const response = await fetch(`${API_BASE}/api/uploads/`, {
         method: 'POST',
         body: formData
       });
@@ -96,7 +97,7 @@ export default function SignUpPage() {
       await signupWithEmail(email, password, name, "CUSTOMER");
 
       // 2. Call register-profile fallback profile seeding
-      await fetch('http://localhost:8000/api/auth/register-profile', {
+      await fetch(`${API_BASE}/api/auth/register-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -130,7 +131,7 @@ export default function SignUpPage() {
       await signupWithEmail(email, password, name, "PROVIDER");
 
       // 2. Submit entire profile details (KYC docs, categories, pricing)
-      const profileResponse = await fetch('http://localhost:8000/api/auth/register-profile', {
+      const profileResponse = await fetch(`${API_BASE}/api/auth/register-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -482,7 +483,7 @@ export default function SignUpPage() {
                           <select
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
-                            className="w-full p-3.5 rounded-xl border border-slate-900 bg-black/25 focus:bg-black/40 text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full p-3.5 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                           >
                             {["Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "Pest Control", "Deep Cleaning", "Beautician", "Yoga Instructor", "Driver"].map(c => (
                               <option key={c} value={c} className="bg-slate-950 text-slate-200">{c}</option>

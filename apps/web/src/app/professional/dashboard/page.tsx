@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 function ProfessionalDashboardContent() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const { user, logout, token } = useAuth();
   
   // Testing mode states for multi-skill professional
@@ -27,7 +28,7 @@ function ProfessionalDashboardContent() {
   const handleSwitchTestingCategory = async (cat: string) => {
     setSwitching(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/auth/testing/switch-category?category=${cat}`, {
+      const res = await fetch(`${API_BASE}/api/auth/testing/switch-category?category=${cat}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -67,7 +68,7 @@ function ProfessionalDashboardContent() {
   const loadProfessionalJobs = async () => {
     if (!token || !user) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/?userId=${user.id}&role=PROVIDER`, {
+      const res = await fetch(`${API_BASE}/api/bookings/?userId=${user.id}&role=PROVIDER`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -87,7 +88,7 @@ function ProfessionalDashboardContent() {
 
   const updateJobStatus = async (bookingId: string, statusStr: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/status`, {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -99,7 +100,7 @@ function ProfessionalDashboardContent() {
         loadProfessionalJobs();
         if (statusStr === 'ARRIVED') {
           // Trigger OTP generation on arrival
-          await fetch(`http://localhost:8000/api/bookings/${bookingId}/send-otp`, {
+          await fetch(`${API_BASE}/api/bookings/${bookingId}/send-otp`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -117,7 +118,7 @@ function ProfessionalDashboardContent() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/verify-otp`, {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,7 +211,7 @@ function ProfessionalDashboardContent() {
   const loadWalletBalance = async () => {
     if (!token || !user) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/payments/wallet/balance?userId=${user.id}`, {
+      const res = await fetch(`${API_BASE}/api/payments/wallet/balance?userId=${user.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -435,7 +436,7 @@ function ProfessionalDashboardContent() {
                       disabled={switching}
                       value={selectedTestingCategory}
                       onChange={(e) => handleSwitchTestingCategory(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-900 bg-black/40 text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      className="w-full p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                     >
                       {[
                         "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "RO Repair", "Refrigerator Repair", 
@@ -445,7 +446,7 @@ function ProfessionalDashboardContent() {
                         "Fitness Trainer", "Yoga Instructor", "Beautician", "Makeup Artist", "Pet Care", "Elder Care", 
                         "Babysitter", "Driver on Demand"
                       ].map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
                       ))}
                     </select>
                     {switching && (
@@ -499,7 +500,7 @@ function ProfessionalDashboardContent() {
                           <button
                             onClick={async () => {
                               try {
-                                const res = await fetch(`http://localhost:8000/api/bookings/${job.id}/accept`, {
+                                const res = await fetch(`${API_BASE}/api/bookings/${job.id}/accept`, {
                                   method: 'POST',
                                   headers: { 'Authorization': `Bearer ${token}` }
                                 });
@@ -513,7 +514,7 @@ function ProfessionalDashboardContent() {
                           <button
                             onClick={async () => {
                               try {
-                                const res = await fetch(`http://localhost:8000/api/bookings/${job.id}/reject`, {
+                                const res = await fetch(`${API_BASE}/api/bookings/${job.id}/reject`, {
                                   method: 'POST',
                                   headers: { 'Authorization': `Bearer ${token}` }
                                 });
@@ -678,11 +679,11 @@ function ProfessionalDashboardContent() {
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Gender</label>
                 <select
                   defaultValue="Male"
-                  className="p-3 rounded-xl border border-slate-900 bg-black/45 text-xs text-slate-350 focus:outline-none"
+                  className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                 >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
+                  <option value="Male" className="bg-slate-950 text-slate-200">Male</option>
+                  <option value="Female" className="bg-slate-950 text-slate-200">Female</option>
+                  <option value="Other" className="bg-slate-950 text-slate-200">Other</option>
                 </select>
               </div>
 

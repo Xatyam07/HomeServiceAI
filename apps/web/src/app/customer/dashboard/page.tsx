@@ -63,6 +63,7 @@ const CITIES_LIST = [
 ];
 
 function DashboardContent() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, logout, refreshUserProfile } = useAuth();
@@ -86,7 +87,7 @@ function DashboardContent() {
   const loadWalletBalance = async () => {
     if (!token || !user) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/payments/wallet/balance?userId=${user.id}`, {
+      const res = await fetch(`${API_BASE}/api/payments/wallet/balance?userId=${user.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -102,7 +103,7 @@ function DashboardContent() {
     if (!couponCode.trim()) return;
     const totalToPay = isEmergency ? selectedPro.rate + 150 : selectedPro.rate;
     try {
-      const res = await fetch('http://localhost:8000/api/payments/coupons/validate', {
+      const res = await fetch(`${API_BASE}/api/payments/coupons/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ function DashboardContent() {
   const handleWalletTopup = async () => {
     if (!token || !user) return;
     try {
-      const res = await fetch('http://localhost:8000/api/payments/wallet/add', {
+      const res = await fetch(`${API_BASE}/api/payments/wallet/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +179,7 @@ function DashboardContent() {
   const loadCustomerBookings = async () => {
     if (!token || !user) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/?userId=${user.id}&role=CUSTOMER`, {
+      const res = await fetch(`${API_BASE}/api/bookings/?userId=${user.id}&role=CUSTOMER`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -212,7 +213,7 @@ function DashboardContent() {
     formData.append("file", file);
 
     try {
-      const response = await fetch('http://localhost:8000/api/uploads/', {
+      const response = await fetch(`${API_BASE}/api/uploads/`, {
         method: 'POST',
         body: formData
       });
@@ -228,7 +229,7 @@ function DashboardContent() {
     e.preventDefault();
     setIsSavingProfile(true);
     try {
-      const response = await fetch('http://localhost:8000/api/auth/register-profile', {
+      const response = await fetch(`${API_BASE}/api/auth/register-profile`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -381,7 +382,7 @@ function DashboardContent() {
 
     // 2. Query actual Database professionals via matching endpoint
     try {
-      const url = new URL('http://localhost:8000/api/ai/match/search');
+      const url = new URL(`${API_BASE}/api/ai/match/search`);
       url.searchParams.append('category', selectedService);
       if (cityFilter) url.searchParams.append('city', cityFilter);
       if (ratingFilter) url.searchParams.append('min_rating', ratingFilter);
@@ -474,7 +475,7 @@ function DashboardContent() {
     };
 
     try {
-      const res = await fetch('http://localhost:8000/api/bookings/', {
+      const res = await fetch(`${API_BASE}/api/bookings/`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -486,7 +487,7 @@ function DashboardContent() {
       const booking = await res.json();
 
       if (paymentMethod === 'Wallet') {
-        const walletPayRes = await fetch('http://localhost:8000/api/payments/wallet/pay', {
+        const walletPayRes = await fetch(`${API_BASE}/api/payments/wallet/pay`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -504,17 +505,25 @@ function DashboardContent() {
         }
         setIsPaying(false);
         router.push(`/customer/track/${booking.id}`);
+      } else if (paymentMethod === 'COD') {
+        // Pay After Service option (Cash / UPI on completion)
+        alert(`Booking Confirmed! You have selected Pay After Service. Total ₹${finalBill.toFixed(2)} will be due upon completion of the service.`);
+        setIsPaying(false);
+        router.push(`/customer/track/${booking.id}`);
       } else {
+        const chargeAmt = paymentMethod === 'PARTIAL' ? finalBill * 0.10 : finalBill;
+        const pType = paymentMethod === 'PARTIAL' ? 'PARTIAL_ADVANCE' : 'FULL_BEFORE';
+        
         const orderPayload = {
           booking_id: booking.id,
           user_id: booking.customer_id,
-          amount: finalBill,
-          payment_type: paymentMethod === 'Card' ? 'FULL_BEFORE' : 'FULL_BEFORE',
+          amount: chargeAmt,
+          payment_type: pType,
           coupon_code: couponCode || null,
           tip_amount: tipAmount
         };
         
-        const orderRes = await fetch('http://localhost:8000/api/payments/order', {
+        const orderRes = await fetch(`${API_BASE}/api/payments/order`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -522,6 +531,10 @@ function DashboardContent() {
           },
           body: JSON.stringify(orderPayload)
         });
+        if (!orderRes.ok) {
+          const orderErr = await orderRes.json();
+          throw new Error(orderErr.detail || "Razorpay order creation failed.");
+        }
         const order = await orderRes.json();
 
         const verifyPayload = {
@@ -531,7 +544,7 @@ function DashboardContent() {
           signature: "test_signature_success"
         };
         
-        await fetch('http://localhost:8000/api/payments/verify', {
+        const verifyRes = await fetch(`${API_BASE}/api/payments/verify`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -539,7 +552,13 @@ function DashboardContent() {
           },
           body: JSON.stringify(verifyPayload)
         });
+        if (!verifyRes.ok) {
+          throw new Error("Razorpay verification handshake failed.");
+        }
 
+        if (paymentMethod === 'PARTIAL') {
+          alert(`Partial advance of ₹${chargeAmt.toFixed(2)} captured successfully! The remaining balance will be due after the service.`);
+        }
         setIsPaying(false);
         router.push(`/customer/track/${booking.id}`);
       }
@@ -554,8 +573,8 @@ function DashboardContent() {
     const textToSend = customText || chatInput;
     if (!textToSend.trim()) return;
 
-    // Map conversation history to API payload format
-    const history = chatMessages.map((m) => ({
+    // Map conversation history to API payload format (capping to last 6 messages to optimize latency)
+    const history = chatMessages.slice(-6).map((m) => ({
       role: m.sender === 'ai' ? 'model' : 'user',
       content: m.text
     }));
@@ -591,7 +610,12 @@ function DashboardContent() {
         })));
       }
 
-      setChatMessages(prev => [...prev, { sender: 'ai', text: response }]);
+      setChatMessages(prev => [...prev, { 
+        sender: 'ai', 
+        text: response, 
+        matches: data.matched_professionals || [],
+        recommended_service: data.recommended_service
+      }]);
     } catch (err) {
       console.error("Chatbot API failed:", err);
       // Fallback rule-based matching
@@ -769,9 +793,9 @@ function DashboardContent() {
                       <select
                         value={selectedService}
                         onChange={(e) => setSelectedService(e.target.value)}
-                        className="w-full p-3 rounded-xl border border-slate-900 bg-black/45 text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                       >
-                        <option value="">-- Choose Category --</option>
+                        <option value="" className="bg-slate-950 text-slate-200">-- Choose Category --</option>
                         {[
                           "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "RO Repair", "Refrigerator Repair", 
                           "Washing Machine Repair", "TV Repair", "Laptop Repair", "Mobile Repair", "CCTV Installation", 
@@ -780,7 +804,7 @@ function DashboardContent() {
                           "Fitness Trainer", "Yoga Instructor", "Beautician", "Makeup Artist", "Pet Care", "Elder Care", 
                           "Babysitter", "Driver on Demand"
                         ].map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
+                          <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
                         ))}
                       </select>
                     </div>
@@ -794,11 +818,11 @@ function DashboardContent() {
                           <select 
                             value={cityFilter}
                             onChange={(e) => setCityFilter(e.target.value)}
-                            className="p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-300 focus:outline-none cursor-pointer"
+                            className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer font-semibold text-xs"
                           >
-                            <option value="">Select City</option>
+                            <option value="" className="bg-slate-950 text-slate-200">Select City</option>
                             {CITIES_LIST.map((city) => (
-                              <option key={city} value={city}>{city}</option>
+                              <option key={city} value={city} className="bg-slate-950 text-slate-200">{city}</option>
                             ))}
                           </select>
                         </div>
@@ -808,11 +832,11 @@ function DashboardContent() {
                           <select 
                             value={ratingFilter}
                             onChange={(e) => setRatingFilter(e.target.value)}
-                            className="p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-300 focus:outline-none"
+                            className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer font-semibold text-xs"
                           >
-                            <option value="">All Ratings</option>
-                            <option value="4.0">4.0+ Stars</option>
-                            <option value="4.5">4.5+ Stars</option>
+                            <option value="" className="bg-slate-950 text-slate-200">All Ratings</option>
+                            <option value="4.0" className="bg-slate-950 text-slate-200">4.0+ Stars</option>
+                            <option value="4.5" className="bg-slate-950 text-slate-200">4.5+ Stars</option>
                           </select>
                         </div>
 
@@ -1073,11 +1097,13 @@ function DashboardContent() {
                         <select
                           value={paymentMethod}
                           onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="w-full p-3 rounded-xl border border-slate-900 bg-black/25 text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+                          className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs shadow-lg backdrop-blur-md transition-all font-semibold"
                         >
-                          <option value="UPI">UPI Instant Pay (Razorpay Test Mode)</option>
-                          <option value="Card">Visa / Mastercard (Secure Checkout)</option>
-                          <option value="Wallet">Credits Wallet (Balance: ₹{walletBalance.toFixed(2)})</option>
+                          <option value="UPI" className="bg-slate-950 text-slate-200">UPI Instant Pay (Razorpay Test Mode)</option>
+                          <option value="Card" className="bg-slate-950 text-slate-200">Visa / Mastercard (Secure Checkout)</option>
+                          <option value="Wallet" className="bg-slate-950 text-slate-200">Credits Wallet (Balance: ₹{walletBalance.toFixed(2)})</option>
+                          <option value="COD" className="bg-slate-950 text-slate-200">Pay After Service (Cash/UPI on Completion)</option>
+                          <option value="PARTIAL" className="bg-slate-950 text-slate-200">Partial Advance Deposit (10% Reservation fee)</option>
                         </select>
                       </div>
 
@@ -1399,11 +1425,11 @@ function DashboardContent() {
                 <select
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-slate-900 bg-black/25 text-slate-350 focus:outline-none cursor-pointer"
+                  className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                 >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
+                  <option value="Male" className="bg-slate-950 text-slate-200">Male</option>
+                  <option value="Female" className="bg-slate-950 text-slate-200">Female</option>
+                  <option value="Other" className="bg-slate-950 text-slate-200">Other</option>
                 </select>
               </div>
 
@@ -1468,12 +1494,12 @@ function DashboardContent() {
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Preferred Language</label>
                 <select
                   defaultValue="English (EN-IN)"
-                  className="w-full p-3 rounded-xl border border-slate-900 bg-black/25 text-slate-300 focus:outline-none cursor-pointer"
+                  className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                 >
-                  <option>English (EN-IN)</option>
-                  <option>Hindi (HI-IN)</option>
-                  <option>Telugu (TE-IN)</option>
-                  <option>Tamil (TA-IN)</option>
+                  <option className="bg-slate-950 text-slate-200">English (EN-IN)</option>
+                  <option className="bg-slate-950 text-slate-200">Hindi (HI-IN)</option>
+                  <option className="bg-slate-950 text-slate-200">Telugu (TE-IN)</option>
+                  <option className="bg-slate-950 text-slate-200">Tamil (TA-IN)</option>
                 </select>
               </div>
 
@@ -1568,17 +1594,62 @@ function DashboardContent() {
               </div>
 
               {/* Message List */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 text-xs">
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 text-xs scrollbar-thin">
                 {chatMessages.map((msg, i) => (
                   <div 
                     key={i} 
                     className={`max-w-[85%] p-3 rounded-xl text-left leading-relaxed ${
                       msg.sender === 'ai' 
-                        ? 'bg-slate-900 border border-slate-800 text-slate-350 mr-auto rounded-tl-none whitespace-pre-wrap' 
-                        : 'bg-indigo-650 text-white ml-auto rounded-tr-none'
+                        ? 'bg-slate-900 border border-slate-800 text-slate-350 mr-auto rounded-tl-none' 
+                        : 'bg-indigo-600 text-white ml-auto rounded-tr-none'
                     }`}
                   >
-                    {msg.text}
+                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                    
+                    {msg.matches && msg.matches.length > 0 && (
+                      <div className="mt-3 flex flex-col gap-2 w-full border-t border-slate-800/80 pt-2.5">
+                        <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-wider block">Top Matches:</span>
+                        <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                          {msg.matches.map((pro: any) => (
+                            <div key={pro.id} className="p-2.5 bg-black/45 border border-slate-800 rounded-xl flex items-center justify-between gap-2.5 text-left">
+                              <div className="flex items-center gap-2">
+                                <img 
+                                  src={pro.profile_photo} 
+                                  alt={pro.name}
+                                  className="w-8 h-8 rounded-full border border-slate-700 object-cover"
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-slate-200 text-[11px]">{pro.name}</span>
+                                  <span className="text-[9px] text-slate-500 mt-0.5">⭐ {pro.rating} • {pro.experience} yrs exp</span>
+                                  <span className="text-[9px] text-indigo-400 font-bold mt-0.5">₹{pro.price}/hr • {pro.distance} km</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setSelectedPro({
+                                    id: pro.id,
+                                    name: pro.name,
+                                    rate: pro.price,
+                                    eta: pro.eta,
+                                    phone: pro.phone,
+                                    rating: pro.rating,
+                                    experience: pro.experience,
+                                    category: msg.recommended_service || selectedService || "AC Repair"
+                                  });
+                                  setActiveStep(3);
+                                  setCustomerTab('home');
+                                  setChatOpen(false);
+                                  alert(`Configured booking for ${pro.name}! Confirm details and pay below.`);
+                                }}
+                                className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[9px] font-bold transition-all whitespace-nowrap cursor-pointer shadow-md"
+                              >
+                                Book Now
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 

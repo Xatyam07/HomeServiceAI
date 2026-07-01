@@ -22,6 +22,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 export default function TrackBooking() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const { token } = useAuth();
   const params = useParams();
   const bookingId = params?.id;
@@ -47,7 +48,7 @@ export default function TrackBooking() {
 
     const loadBookingData = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}`, {
+        const res = await fetch(`${API_BASE}/api/bookings/${bookingId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -62,7 +63,7 @@ export default function TrackBooking() {
         }
         
         // Fetch OTP
-        const otpRes = await fetch(`http://localhost:8000/api/bookings/${bookingId}/otp`, {
+        const otpRes = await fetch(`${API_BASE}/api/bookings/${bookingId}/otp`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (otpRes.ok) {
@@ -184,7 +185,7 @@ export default function TrackBooking() {
   // Start Job with OTP
   const verifyOtpAndStart = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/verify-otp`, {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -209,7 +210,7 @@ export default function TrackBooking() {
 
   const confirmCompletion = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/bookings/${bookingId}/confirm-completion`, {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/confirm-completion`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

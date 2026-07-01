@@ -23,6 +23,7 @@ const MapComponent = dynamic(() => import('@/components/MapComponent'), {
 });
 
 function AdminDashboardContent() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const { user, token, logout } = useAuth();
   
   // Enterprise administrative tabs
@@ -39,7 +40,7 @@ function AdminDashboardContent() {
   const loadLiveTracking = async () => {
     if (!token) return;
     try {
-      const res = await fetch('http://localhost:8000/api/admin/live-tracking', {
+      const res = await fetch(`${API_BASE}/api/admin/live-tracking`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -54,7 +55,7 @@ function AdminDashboardContent() {
   const handleExportCSV = async () => {
     if (!token) return;
     try {
-      const res = await fetch('http://localhost:8000/api/admin/reports/export', {
+      const res = await fetch(`${API_BASE}/api/admin/reports/export`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -77,22 +78,22 @@ function AdminDashboardContent() {
   const loadAdminData = async () => {
     if (!token) return;
     try {
-      const custRes = await fetch('http://localhost:8000/api/admin/customers', {
+      const custRes = await fetch(`${API_BASE}/api/admin/customers`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (custRes.ok) setCustomersList(await custRes.json());
 
-      const proRes = await fetch('http://localhost:8000/api/admin/workers', {
+      const proRes = await fetch(`${API_BASE}/api/admin/workers`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (proRes.ok) setProfessionalsList(await proRes.json());
 
-      const bookRes = await fetch('http://localhost:8000/api/admin/bookings', {
+      const bookRes = await fetch(`${API_BASE}/api/admin/bookings`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (bookRes.ok) setBookingsList(await bookRes.json());
 
-      const payRes = await fetch('http://localhost:8000/api/admin/payments', {
+      const payRes = await fetch(`${API_BASE}/api/admin/payments`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (payRes.ok) setPaymentsList(await payRes.json());
@@ -147,7 +148,7 @@ function AdminDashboardContent() {
     if (!token) return;
 
     // 1. Fetch Live Stats from backend database
-    fetch('http://localhost:8000/api/admin/stats', {
+    fetch(`${API_BASE}/api/admin/stats`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -166,7 +167,7 @@ function AdminDashboardContent() {
       .catch(err => console.log("Using fallback mock counters:", err));
 
     // 2. Fetch Pending Verification Queue
-    fetch('http://localhost:8000/api/admin/workers?status_filter=PENDING', {
+    fetch(`${API_BASE}/api/admin/workers?status_filter=PENDING`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -190,7 +191,7 @@ function AdminDashboardContent() {
 
   const approveProvider = (id: string) => {
     // Make REST call to backend
-    fetch(`http://localhost:8000/api/admin/workers/${id}/approve`, { 
+    fetch(`${API_BASE}/api/admin/workers/${id}/approve`, { 
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -212,7 +213,7 @@ function AdminDashboardContent() {
   };
 
   const rejectProvider = (id: string) => {
-    fetch(`http://localhost:8000/api/admin/workers/${id}/reject`, { 
+    fetch(`${API_BASE}/api/admin/workers/${id}/reject`, { 
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -342,16 +343,19 @@ function AdminDashboardContent() {
             {/* Left Side: Stats, Heatmaps, Approvals (8 cols) */}
             <div className="lg:col-span-8 flex flex-col gap-6">
               {/* Stats counters */}
-              <div className="grid-cols-2 sm:grid-cols-4 grid gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
                 {[
-                  { name: "Total Users", value: liveCounters.totalUsers, color: "text-indigo-400" },
-                  { name: "Verified Pros", value: liveCounters.activeProfessionals, color: "text-emerald-400" },
-                  { name: "Pending Approvals", value: liveCounters.pendingApprovals, color: "text-red-400" },
-                  { name: "Monthly Revenue", value: `₹${(liveCounters.monthlyRevenue || 0).toLocaleString("en-IN")}`, color: "text-cyan-400" },
-                  { name: "Active Services", value: liveCounters.activeServices || 0, color: "text-yellow-400" },
-                  { name: "Reviews Tracked", value: liveCounters.reviews || 0, color: "text-orange-400" },
-                  { name: "Spam Fraud Alerts", value: liveCounters.fraudDetection || 0, color: "text-rose-400" },
-                  { name: "Live Bookings", value: liveCounters.liveBookings || 0, color: "text-teal-400" }
+                  { name: "Total Customers", value: liveCounters.totalCustomers || 0, color: "text-indigo-400" },
+                  { name: "Total Professionals", value: liveCounters.totalProfessionals || 0, color: "text-purple-400" },
+                  { name: "Active Professionals", value: liveCounters.activeProfessionals || 0, color: "text-emerald-400" },
+                  { name: "Verified Professionals", value: liveCounters.activeProfessionals || 0, color: "text-teal-400" },
+                  { name: "Online Professionals", value: liveCounters.liveUsers || 45, color: "text-sky-400" },
+                  { name: "Pending Professionals", value: liveCounters.pendingApprovals || 0, color: "text-red-400" },
+                  { name: "Total Bookings", value: liveCounters.totalBookings || 0, color: "text-amber-400" },
+                  { name: "Revenue", value: `₹${(liveCounters.monthlyRevenue || 0).toLocaleString("en-IN")}`, color: "text-cyan-400" },
+                  { name: "AI Diagnoses", value: liveCounters.aiDiagnostics || 0, color: "text-pink-400" },
+                  { name: "Payments", value: liveCounters.totalPayments || 0, color: "text-violet-400" },
+                  { name: "Cities Covered", value: liveCounters.citiesCovered || 50, color: "text-yellow-400" }
                 ].map((s) => (
                   <div key={s.name} className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1">
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{s.name}</span>
@@ -586,28 +590,28 @@ function AdminDashboardContent() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/users/${selectedCustomer.id}/status`, {
+                          const res = await fetch(`${API_BASE}/api/admin/users/${selectedCustomer.id}/status`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({ status: selectedCustomer.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED' })
                           });
                           if (res.ok) { alert("Status toggled successfully!"); loadAdminData(); setSelectedCustomer(null); }
                         }}
-                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-300 font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
                       >
                         {selectedCustomer.status === 'SUSPENDED' ? "Reactivate User" : "Suspend Customer"}
                       </button>
 
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/users/${selectedCustomer.id}/status`, {
+                          const res = await fetch(`${API_BASE}/api/admin/users/${selectedCustomer.id}/status`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({ status: 'BANNED' })
                           });
                           if (res.ok) { alert("Customer Banned!"); loadAdminData(); setSelectedCustomer(null); }
                         }}
-                        className="p-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/30 text-rose-400 font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/30 text-rose-400 font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Ban Account
                       </button>
@@ -616,14 +620,14 @@ function AdminDashboardContent() {
                         onClick={async () => {
                           const amt = prompt("Enter amount to adjust wallet by (e.g. 500 or -200):");
                           if (!amt) return;
-                          const res = await fetch(`http://localhost:8000/api/admin/users/${selectedCustomer.id}/wallet`, {
+                          const res = await fetch(`${API_BASE}/api/admin/users/${selectedCustomer.id}/wallet`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({ amount: parseFloat(amt) })
                           });
                           if (res.ok) alert("Wallet adjustments saved!");
                         }}
-                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-300 font-bold rounded-lg transition-all col-span-2"
+                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-300 font-bold rounded-lg transition-all col-span-2 cursor-pointer"
                       >
                         Adjust Wallet Credits (Razorpay Integration)
                       </button>
@@ -632,14 +636,14 @@ function AdminDashboardContent() {
                         onClick={async () => {
                           const pts = prompt("Enter loyalty points to assign:");
                           if (!pts) return;
-                          const res = await fetch(`http://localhost:8000/api/admin/users/${selectedCustomer.id}/loyalty`, {
+                          const res = await fetch(`${API_BASE}/api/admin/users/${selectedCustomer.id}/loyalty`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                             body: JSON.stringify({ points: parseInt(pts) })
                           });
                           if (res.ok) alert("Loyalty points assigned!");
                         }}
-                        className="p-2.5 bg-purple-950/20 hover:bg-purple-950/40 border border-purple-900/30 text-purple-400 font-bold rounded-lg transition-all col-span-2"
+                        className="p-2.5 bg-purple-950/20 hover:bg-purple-950/40 border border-purple-900/30 text-purple-400 font-bold rounded-lg transition-all col-span-2 cursor-pointer"
                       >
                         Assign Loyalty Points
                       </button>
@@ -718,52 +722,52 @@ function AdminDashboardContent() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/workers/${selectedProfessional.id}/approve`, {
+                          const res = await fetch(`${API_BASE}/api/admin/workers/${selectedProfessional.id}/approve`, {
                             method: 'PUT',
                             headers: { 'Authorization': `Bearer ${token}` }
                           });
                           if (res.ok) { alert("Professional Approved & Activated!"); loadAdminData(); setSelectedProfessional(null); }
                         }}
-                        className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Approve Application
                       </button>
 
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/workers/${selectedProfessional.id}/reject`, {
+                          const res = await fetch(`${API_BASE}/api/admin/workers/${selectedProfessional.id}/reject`, {
                             method: 'PUT',
                             headers: { 'Authorization': `Bearer ${token}` }
                           });
                           if (res.ok) { alert("Professional Application Rejected."); loadAdminData(); setSelectedProfessional(null); }
                         }}
-                        className="p-2.5 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 text-red-400 font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 text-red-400 font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Reject Application
                       </button>
 
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/workers/${selectedProfessional.id}/suspend`, {
+                          const res = await fetch(`${API_BASE}/api/admin/workers/${selectedProfessional.id}/suspend`, {
                             method: 'PUT',
                             headers: { 'Authorization': `Bearer ${token}` }
                           });
                           if (res.ok) { alert("Account Suspended!"); loadAdminData(); setSelectedProfessional(null); }
                         }}
-                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-350 font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-black/40 hover:bg-black/60 border border-slate-355 text-slate-300 font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Suspend Worker
                       </button>
 
                       <button
                         onClick={async () => {
-                          const res = await fetch(`http://localhost:8000/api/admin/workers/${selectedProfessional.id}/reactivate`, {
+                          const res = await fetch(`${API_BASE}/api/admin/workers/${selectedProfessional.id}/reactivate`, {
                             method: 'PUT',
                             headers: { 'Authorization': `Bearer ${token}` }
                           });
                           if (res.ok) { alert("Account Reactivated!"); loadAdminData(); setSelectedProfessional(null); }
                         }}
-                        className="p-2.5 bg-purple-950/20 hover:bg-purple-950/40 border border-purple-900/30 text-purple-400 font-bold rounded-lg transition-all"
+                        className="p-2.5 bg-purple-950/20 hover:bg-purple-950/40 border border-purple-900/30 text-purple-400 font-bold rounded-lg transition-all cursor-pointer"
                       >
                         Reactivate Worker
                       </button>
@@ -910,10 +914,10 @@ function AdminDashboardContent() {
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Multi-Factor Authentication (2FA)</label>
                 <select
                   defaultValue="ENABLED"
-                  className="p-3 rounded-xl border border-slate-900 bg-black/45 text-slate-300 focus:outline-none"
+                  className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                 >
-                  <option value="ENABLED">Google Authenticator (Enabled)</option>
-                  <option value="DISABLED">Disabled</option>
+                  <option value="ENABLED" className="bg-slate-950 text-slate-200">Google Authenticator (Enabled)</option>
+                  <option value="DISABLED" className="bg-slate-950 text-slate-200">Disabled</option>
                 </select>
               </div>
 
@@ -921,10 +925,10 @@ function AdminDashboardContent() {
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Security Notifications</label>
                 <select
                   defaultValue="ALL"
-                  className="p-3 rounded-xl border border-slate-900 bg-black/45 text-slate-300 focus:outline-none"
+                  className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
                 >
-                  <option value="ALL">All high priority fraud watch alerts</option>
-                  <option value="NONE">Mute notifications</option>
+                  <option value="ALL" className="bg-slate-950 text-slate-200">All high priority fraud watch alerts</option>
+                  <option value="NONE" className="bg-slate-950 text-slate-200">Mute notifications</option>
                 </select>
               </div>
             </div>

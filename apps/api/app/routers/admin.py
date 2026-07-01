@@ -19,6 +19,10 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     active_pros = db.query(User).filter(User.role == "PROVIDER", User.status == "APPROVED").count()
     rejected_pros = db.query(User).filter(User.role == "PROVIDER", User.status == "REJECTED").count()
     
+    total_bookings = db.query(Booking).count()
+    total_payments = db.query(PaymentRecord).count()
+    cities_covered = db.query(ProviderProfile.city).distinct().count()
+    
     # Financial metrics
     completed_bookings = db.query(Booking).filter(Booking.status == "COMPLETED").all()
     monthly_rev = sum(b.total_cost for b in completed_bookings)
@@ -127,6 +131,9 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
             "activeProfessionals": active_pros,
             "rejectedApplications": rejected_pros,
             "todayBookings": today_bookings,
+            "totalBookings": total_bookings,
+            "totalPayments": total_payments,
+            "citiesCovered": cities_covered if cities_covered > 0 else 50,
             "monthlyRevenue": monthly_rev,
             "activeServices": active_services,
             "complaints": len(complaints),

@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Zap, Wrench, Paintbrush, Flame, Cpu, ShieldCheck, 
-  MapPin, Clock, ArrowRight, Star, Sun, Moon, 
+import {
+  Zap, Wrench, Paintbrush, Flame, Cpu, ShieldCheck,
+  MapPin, Clock, ArrowRight, Star, Sun, Moon,
   MessageSquare, Send, Sparkles, AlertTriangle, Shield, CheckCircle2, ChevronDown, LogOut, User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,7 +32,7 @@ export default function LandingPage() {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  
+
   // AI assistant simulator state
   const [query, setQuery] = useState('');
   const [isDiagnosing, setIsDiagnosing] = useState(false);
@@ -192,9 +192,9 @@ export default function LandingPage() {
               if (item.href) {
                 if (item.href.startsWith('#')) {
                   return (
-                    <a 
+                    <a
                       key={index}
-                      href={item.href} 
+                      href={item.href}
                       onClick={(e) => handleLinkClick(e, item)}
                       className="hover:text-indigo-500 transition-colors"
                     >
@@ -203,7 +203,7 @@ export default function LandingPage() {
                   );
                 } else {
                   return (
-                    <Link 
+                    <Link
                       key={index}
                       href={item.href}
                       className="hover:text-indigo-500 transition-colors"
@@ -214,7 +214,7 @@ export default function LandingPage() {
                 }
               } else {
                 return (
-                  <button 
+                  <button
                     key={index}
                     onClick={(e) => handleLinkClick(e, item)}
                     className="hover:text-indigo-500 transition-colors cursor-pointer bg-transparent border-none p-0 text-sm font-medium text-slate-600 dark:text-slate-300"
@@ -227,7 +227,7 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={toggleTheme}
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
             >
@@ -236,7 +236,7 @@ export default function LandingPage() {
 
             {!user ? (
               <>
-                <motion.button 
+                <motion.button
                   onClick={(e) => {
                     e.preventDefault();
                     const servicesSec = document.getElementById('services');
@@ -244,7 +244,7 @@ export default function LandingPage() {
                       servicesSec.scrollIntoView({ behavior: 'smooth' });
                     }
                   }}
-                  whileHover={{ 
+                  whileHover={{
                     scale: 1.03,
                     boxShadow: "0 0 15px rgba(99, 102, 241, 0.35)",
                   }}
@@ -254,13 +254,13 @@ export default function LandingPage() {
                 >
                   Explore Home Services
                 </motion.button>
-                <Link 
+                <Link
                   href="/login"
                   className="px-4.5 py-2 text-xs font-bold rounded-xl bg-white/5 border border-slate-800 text-slate-300 hover:text-white transition-colors"
                 >
                   Login
                 </Link>
-                <Link 
+                <Link
                   href="/signup"
                   className="px-4.5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
                 >
@@ -269,7 +269,7 @@ export default function LandingPage() {
               </>
             ) : (
               <div className="relative">
-                <div 
+                <div
                   className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs overflow-hidden cursor-pointer border border-slate-800"
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 >
@@ -293,38 +293,38 @@ export default function LandingPage() {
                         <span className="font-bold text-slate-200 truncate">{user.name}</span>
                         <span className="text-[10px] text-slate-500 truncate">{user.email}</span>
                       </div>
-                      <Link 
+                      <Link
                         href={user.role === 'PROVIDER' ? (user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? '/professional/pending' : '/professional/dashboard') : user.role === 'CUSTOMER' ? '/customer/dashboard' : '/admin/dashboard'}
                         onClick={() => setProfileDropdownOpen(false)}
                         className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors"
                       >
                         Dashboard
                       </Link>
-                      <button 
+                      <button
                         onClick={() => { setProfileDropdownOpen(false); alert("Profile settings can be managed directly in the dashboard profile editor."); }}
                         className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
                       >
                         Profile
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setProfileDropdownOpen(false); alert("Settings configuration panel is coming soon!"); }}
                         className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
                       >
                         Settings
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setProfileDropdownOpen(false); alert("You have no new notifications."); }}
                         className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
                       >
                         Notifications
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setProfileDropdownOpen(false); alert("For support, please email support@homesphere.ai"); }}
                         className="px-3 py-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors text-left"
                       >
                         Help
                       </button>
-                      <button 
+                      <button
                         onClick={() => { setProfileDropdownOpen(false); logout(); }}
                         className="w-full px-3 py-2 hover:bg-red-500/10 text-red-400 hover:text-red-300 rounded-lg transition-colors text-left font-bold border-t border-white/5 mt-1 pt-2"
                       >
@@ -350,32 +350,32 @@ export default function LandingPage() {
             <Sparkles size={12} />
             <span>Next-Generation Home Services Platform</span>
           </motion.div>
-          
+
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight">
             The Future of <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 bg-clip-text text-transparent">Home Care</span>, Diagnosed by AI.
           </h1>
-          
+
           <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-xl">
             Describe your problem or upload photos. Our advanced AI isolates faults instantly, estimates costs, and matches you with top-rated local technicians.
           </p>
 
           <div className="flex flex-wrap gap-4 mt-2">
-            <Link 
+            <Link
               href={
-                !user 
-                  ? '/login' 
-                  : user.role === 'PROVIDER' 
-                  ? (user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? '/professional/pending' : '/professional/dashboard')
-                  : user.role === 'CUSTOMER'
-                  ? '/customer/dashboard'
-                  : '/admin/dashboard'
+                !user
+                  ? '/login'
+                  : user.role === 'PROVIDER'
+                    ? (user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? '/professional/pending' : '/professional/dashboard')
+                    : user.role === 'CUSTOMER'
+                      ? '/customer/dashboard'
+                      : '/admin/dashboard'
               }
               className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-semibold rounded-xl shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2 group"
             >
               <span>Explore Dashboard</span>
               <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
             </Link>
-            <a 
+            <a
               href="#ai-diagnose"
               className="px-6 py-3.5 glass hover:bg-white/10 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-colors border border-slate-200 dark:border-slate-800"
             >
@@ -428,11 +428,10 @@ export default function LandingPage() {
                       setSelectedPreset(preset.label);
                       handleDiagnose(preset.text);
                     }}
-                    className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
-                      selectedPreset === preset.label
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${selectedPreset === preset.label
                         ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
                         : 'bg-white/5 border-slate-200/10 hover:border-slate-300/40 text-slate-300'
-                    }`}
+                      }`}
                   >
                     {preset.label}
                   </button>
@@ -466,7 +465,7 @@ export default function LandingPage() {
             <div className="mt-4 min-h-[120px] rounded-xl bg-black/30 border border-slate-200/5 p-4 flex flex-col justify-center">
               <AnimatePresence mode="wait">
                 {isDiagnosing && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -481,7 +480,7 @@ export default function LandingPage() {
                 )}
 
                 {!isDiagnosing && !diagnosisResult && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="text-center text-slate-500 dark:text-slate-400 py-6 text-sm flex flex-col items-center gap-2"
@@ -492,7 +491,7 @@ export default function LandingPage() {
                 )}
 
                 {!isDiagnosing && diagnosisResult && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col gap-3"
@@ -502,13 +501,12 @@ export default function LandingPage() {
                         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">DETECTED ISSUE</span>
                         <span className="font-bold text-sm text-indigo-400 mt-0.5">{diagnosisResult.issue}</span>
                       </div>
-                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
-                        diagnosisResult.urgency === 'EMERGENCY' 
-                          ? 'bg-red-500/10 border-red-500/30 text-red-400' 
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${diagnosisResult.urgency === 'EMERGENCY'
+                          ? 'bg-red-500/10 border-red-500/30 text-red-400'
                           : diagnosisResult.urgency === 'HIGH'
-                          ? 'bg-orange-500/10 border-orange-500/30 text-orange-400'
-                          : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                      }`}>
+                            ? 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+                            : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                        }`}>
                         {diagnosisResult.urgency}
                       </span>
                     </div>
@@ -536,7 +534,7 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    <Link 
+                    <Link
                       href="/customer/dashboard?service=Electrician"
                       className="mt-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md active:scale-98"
                     >
@@ -579,7 +577,7 @@ export default function LandingPage() {
                   <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                     {svc.desc}
                   </p>
-                  <Link 
+                  <Link
                     href={`/customer/dashboard?service=${svc.name}`}
                     className="text-xs font-semibold text-indigo-400 flex items-center gap-1 mt-2 group-hover:text-indigo-300 transition-colors"
                   >
@@ -601,7 +599,7 @@ export default function LandingPage() {
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               HomeSphere AI is built for the Indian economy, incorporating digital verification logs, instant UPI payouts, smart tracking networks, and diagnostic modeling to bypass unnecessary repair delays.
             </p>
-            
+
             <div className="flex flex-col gap-3.5 mt-2">
               {[
                 { title: "Dynamic Cost Estimation", desc: "No haggling. Receive accurate market cost ranges computed by analyzing material supplies and labor multipliers." },
@@ -651,8 +649,8 @@ export default function LandingPage() {
           {faqs.map((faq, idx) => {
             const isOpen = activeFaq === idx;
             return (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="rounded-xl border border-slate-200/10 dark:bg-slate-900/30 overflow-hidden transition-all duration-200"
               >
                 <button
@@ -662,7 +660,7 @@ export default function LandingPage() {
                   <span className="font-bold text-slate-900 dark:text-slate-200 text-sm sm:text-base">{faq.q}</span>
                   <ChevronDown size={18} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div
@@ -762,7 +760,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6 text-center text-xs text-slate-500 border-t border-slate-200/10 dark:border-slate-800/20 pt-6 mt-8">
-          © 2026 HomeSphere AI. Pair programmed with Antigravity.
+          © 2026 HomeSphere AI. ♡ Designed & Developed with ❤️ by Satyam Mishra ♡.
         </div>
       </footer>
     </div>
