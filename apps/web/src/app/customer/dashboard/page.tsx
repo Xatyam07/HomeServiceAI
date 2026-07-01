@@ -318,14 +318,49 @@ function DashboardContent() {
 
   // Booking Info
   const [scheduledTime, setScheduledTime] = useState('');
-  const [address, setAddress] = useState('Flat 405, Block B, Rainbow Residency, Hitec City, Hyderabad');
+  const [address, setAddress] = useState('Barra, Kanpur, Uttar Pradesh, 208027');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [isPaying, setIsPaying] = useState(false);
 
   const { theme } = useTheme();
-  const [custCoords, setCustCoords] = useState<[number, number]>([17.4485, 78.3741]);
+  const [custCoords, setCustCoords] = useState<[number, number]>([26.4173, 80.3341]);
   const [geocoding, setGeocoding] = useState(false);
   const [geoResults, setGeoResults] = useState<any[]>([]);
+
+  const detectLiveLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setGeocoding(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        setCustCoords([lat, lon]);
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+          if (response.ok) {
+            const data = await response.json();
+            setAddress(data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+          } else {
+            setAddress(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+          }
+        } catch (err) {
+          console.error("Reverse geocoding failed:", err);
+          setAddress(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+        } finally {
+          setGeocoding(false);
+        }
+      },
+      (error) => {
+        console.error("Geolocation failed:", error);
+        alert(`Failed to detect location: ${error.message}`);
+        setGeocoding(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
 
   const handleAddressSearch = async (query: string) => {
     if (!query) return;

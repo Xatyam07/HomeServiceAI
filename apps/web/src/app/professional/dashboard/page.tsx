@@ -149,8 +149,15 @@ function ProviderDashboardContent() {
   };
 
   useEffect(() => {
-    setRoutePoints(generateSimulatedRoute(startCoords, destCoords));
-  }, []);
+    const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
+    if (activeWayJob) {
+      const activeDest: [number, number] = [activeWayJob.latitude || 26.4173, activeWayJob.longitude || 80.3341];
+      const activeStart: [number, number] = [activeDest[0] + 0.008, activeDest[1] - 0.012];
+      setRoutePoints(generateSimulatedRoute(activeStart, activeDest));
+    } else {
+      setRoutePoints(generateSimulatedRoute(startCoords, destCoords));
+    }
+  }, [dbJobs.some(j => j.status === 'ON_THE_WAY')]);
 
   const hasOnTheWay = dbJobs.some(j => j.status === 'ON_THE_WAY');
 

@@ -178,10 +178,13 @@ export default function TrackBooking() {
 
   // Technician tracking simulation variables
   const { theme } = useTheme();
-  const startCoords: [number, number] = [17.4600, 78.3600];
   const destCoords: [number, number] = (bookingDetails?.latitude && bookingDetails?.longitude)
     ? [bookingDetails.latitude, bookingDetails.longitude]
-    : [17.4485, 78.3741];
+    : [26.4173, 80.3341];
+  const startCoords: [number, number] = [
+    destCoords[0] + 0.008,
+    destCoords[1] - 0.012
+  ];
 
   const [routePoints, setRoutePoints] = useState<Array<[number, number]>>([]);
   const [techIndex, setTechIndex] = useState(0);
