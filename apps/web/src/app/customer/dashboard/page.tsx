@@ -8,7 +8,7 @@ import {
   ArrowRight, ShieldCheck, Clock, Zap, Wrench, Cpu, 
   Paintbrush, Flame, Shield, HelpCircle, History, 
   AlertTriangle, DollarSign, X, Check, MessageSquare, Send, UserCheck, Star, LogOut, User as UserIcon,
-  Mic, Paperclip
+  Mic, Paperclip, Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
@@ -66,8 +66,34 @@ function DashboardContent() {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, token, logout, refreshUserProfile } = useAuth();
+  const { user, token, logout, refreshUserProfile, firebaseUser, sendVerification } = useAuth();
   
+  // Email verification state
+  const [emailVerified, setEmailVerified] = useState(true);
+
+  useEffect(() => {
+    if (firebaseUser) {
+      setEmailVerified(firebaseUser.emailVerified);
+    }
+  }, [firebaseUser]);
+
+  const handleCheckVerification = async () => {
+    if (firebaseUser) {
+      try {
+        await firebaseUser.reload();
+        setEmailVerified(firebaseUser.emailVerified);
+        if (firebaseUser.emailVerified) {
+          alert("Email verified successfully! Access granted.");
+          await refreshUserProfile();
+        } else {
+          alert("Email is still not verified. Please check your inbox or spam folder.");
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
   // States
   const [activeStep, setActiveStep] = useState(1);
   const [selectedService, setSelectedService] = useState<string>('');
@@ -659,6 +685,61 @@ function DashboardContent() {
     alert("Image uploaded successfully! AI is scanning reference image for diagnostics...");
     handleChatSend("Simulated image analysis: A rusted pipe joint with active leakage at 3 drops per second.");
   };
+
+  if (!emailVerified && user?.role === 'CUSTOMER') {
+    return (
+      <div className="min-h-screen bg-[#030014] text-white flex flex-col justify-center items-center p-6 relative overflow-hidden">
+        {/* Background glow effects */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-1/4 left-1/3 w-[300px] h-[300px] bg-indigo-900/15 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="max-w-md w-full p-8 rounded-3xl glass border border-white/5 shadow-2xl relative flex flex-col items-center text-center gap-6">
+          <div className="w-16 h-16 rounded-full bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400">
+            <Mail size={32} className="animate-pulse" />
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <h2 className="font-extrabold text-xl tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Verify Your Email
+            </h2>
+            <p className="text-xs text-slate-400 leading-relaxed mt-1">
+              We sent a verification link to <strong className="text-slate-200">{user?.email}</strong>. Please check your inbox and verify your email to unlock your account.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 w-full">
+            <button
+              onClick={handleCheckVerification}
+              className="py-3 bg-purple-750 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer w-full flex items-center justify-center gap-1.5 animate-pulse"
+            >
+              I Have Verified My Email
+            </button>
+            
+            <button
+              onClick={async () => {
+                try {
+                  await sendVerification();
+                  alert("Verification email resent successfully!");
+                } catch (err) {
+                  alert("Error resending email. Please try again later.");
+                }
+              }}
+              className="py-2.5 bg-black/40 hover:bg-black/60 border border-slate-800 text-slate-350 font-bold rounded-xl text-xs transition-all cursor-pointer w-full"
+            >
+              Resend Verification Link
+            </button>
+          </div>
+
+          <button
+            onClick={() => logout()}
+            className="text-[10px] font-bold text-slate-500 hover:text-slate-400 uppercase tracking-widest cursor-pointer mt-1"
+          >
+            Sign Out & Log In Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative grid-bg">

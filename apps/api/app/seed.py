@@ -4,7 +4,7 @@ import uuid
 import random
 from datetime import datetime, timedelta
 
-# 50 Indian Cities and their Center Coordinates (Lat, Lng)
+# 20 Indian Cities and their Center Coordinates (Lat, Lng)
 CITIES_COORDINATES = {
     "Kanpur": (26.4499, 80.3319),
     "Lucknow": (26.8467, 80.9462),
@@ -25,37 +25,7 @@ CITIES_COORDINATES = {
     "Jaipur": (26.9124, 75.7873),
     "Jodhpur": (26.2389, 73.0243),
     "Udaipur": (24.5854, 73.7125),
-    "Bhopal": (23.2599, 77.4126),
-    "Indore": (22.7196, 75.8577),
-    "Hyderabad": (17.3850, 78.4867),
-    "Bengaluru": (12.9716, 77.5946),
-    "Chennai": (13.0827, 80.2707),
-    "Kolkata": (22.5726, 88.3639),
-    "Patna": (25.5941, 85.1376),
-    "Ranchi": (23.3441, 85.3096),
-    "Bhubaneswar": (20.2961, 85.8245),
-    "Chandigarh": (30.7333, 76.7794),
-    "Amritsar": (31.6340, 74.8723),
-    "Ludhiana": (30.9010, 75.8573),
-    "Dehradun": (30.3165, 78.0322),
-    "Haridwar": (29.9457, 78.1642),
-    "Meerut": (28.9845, 77.7064),
-    "Agra": (27.1767, 78.0081),
-    "Bareilly": (28.3670, 79.4304),
-    "Aligarh": (27.8974, 78.0880),
-    "Mathura": (27.4924, 77.6737),
-    "Gorakhpur": (26.7606, 83.3731),
-    "Jhansi": (25.4484, 78.5685),
-    "Raipur": (21.2514, 81.6296),
-    "Visakhapatnam": (17.6868, 83.2185),
-    "Coimbatore": (11.0168, 76.9558),
-    "Kochi": (9.9312, 76.2673),
-    "Mysuru": (12.2958, 76.6394),
-    "Mangalore": (12.9141, 74.8560),
-    "Thiruvananthapuram": (8.5241, 76.9366),
-    "Goa": (15.2993, 74.1240),
-    "Siliguri": (26.7271, 88.3953),
-    "Guwahati": (26.1445, 91.7362)
+    "Bhopal": (23.2599, 77.4126)
 }
 
 # 50+ Home Services Categories
@@ -74,22 +44,7 @@ CATEGORIES = [
 ]
 
 def seed_data(db: Session):
-    # Check if seeding is already done (1000+ providers present)
-    existing_providers_count = db.query(User).filter(User.role == "PROVIDER").count()
-    if existing_providers_count >= 1000:
-        print(f"Database already has {existing_providers_count} providers. Skipping marketplace seeding.")
-        
-        # Make sure our test user exists and has all values
-        test_user = db.query(User).filter(User.email == "xatyammishra07@gmail.com").first()
-        if test_user:
-            profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == test_user.id).first()
-            if profile:
-                profile.is_verified = True
-                profile.is_premium = True
-                db.commit()
-        return
-
-    print("Scaling HomeSphere AI to 1000+ Professionals & 50 Customers across 50 Indian Cities...")
+    print("Scaling HomeSphere AI to 1000+ Professionals & 50 Customers across 20 Indian Cities...")
 
     # Names definitions
     first_names_male = ["Amit", "Suresh", "Rajesh", "Vikas", "Sunil", "Rohan", "Rahul", "Deepak", "Vivek", "Sanjay", "Anil", "Manoj", "Arjun", "Vijay", "Alok", "Sandeep", "Kunal", "Neeraj", "Sachin", "Aditya", "Harsh", "Gaurav", "Karan", "Ajay", "Vikram", "Abhishek", "Rajat", "Sumit", "Mayank", "Manish", "Pranav", "Ashish", "Nikhil", "Pankaj", "Tarun", "Varun", "Ravi", "Anoop", "Raman", "Devendra", "Aarav", "Kabir", "Ishaan", "Rudra", "Reyansh", "Atharva", "Aaryan", "Dhruv", "Arnav", "Krishna"]
@@ -241,21 +196,20 @@ def seed_data(db: Session):
     # Fetch newly created customers
     all_customers = db.query(User).filter(User.role == "CUSTOMER").all()
 
-    # 4. Seeding 1100 professionals across 50 cities (22 professionals per city)
-    print("Generating 1100 service professionals across 50 cities...")
+    # 4. Seeding 1000 professionals across 20 cities (50 professionals per city)
+    print("Generating 1000 service professionals across 20 cities...")
     
     professionals_users = []
     professionals_profiles = []
     
     cities_list = list(CITIES_COORDINATES.keys())
     
-    # We want 1100 providers. 50 cities * 22 providers = 1100 providers.
     provider_idx = 1
     for city in cities_list:
         city_lat, city_lng = CITIES_COORDINATES[city]
         
-        # We pick 22 distinct categories for each city to have wide coverage
-        city_categories = random.sample(CATEGORIES, 22)
+        # We sample 50 distinct categories for each city
+        city_categories = random.sample(CATEGORIES, 50)
         
         for cat in city_categories:
             p_id = uuid.uuid4()
@@ -532,3 +486,20 @@ def seed_data(db: Session):
         
     db.commit()
     print(f"Data seeding completed successfully! Generated {len(bookings_to_save)} historical bookings, {len(payments_to_save)} payment records, and {len(reviews_to_save)} reviews.")
+
+if __name__ == "__main__":
+    from app.database import SessionLocal, engine
+    from app.models import Base
+    db = SessionLocal()
+    try:
+        print("Dropping existing tables for a clean 1052-user seed...")
+        Base.metadata.drop_all(bind=engine)
+        print("Recreating database tables...")
+        Base.metadata.create_all(bind=engine)
+        print("Seeding database...")
+        seed_data(db)
+        print("Database seed completed successfully.")
+    except Exception as e:
+        print(f"Error seeding database: {e}")
+    finally:
+        db.close()

@@ -139,7 +139,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const credentials = await createUserWithEmailAndPassword(auth, email, pass);
-      // Wait for registration backend call, passing details
+      try {
+        await sendEmailVerification(credentials.user);
+      } catch (eVerify) {
+        console.error("Verification email failed to dispatch:", eVerify);
+      }
       const res = await syncWithBackend(credentials.user, role);
       setLoading(false);
       return res;

@@ -124,7 +124,7 @@ def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         longitude=dto.longitude,
         status="REQUESTED",
         rejected_providers="[]",
-        otp=str(random.randint(1000, 9999)) # Pre-generate 4 digit OTP code
+        otp=str(random.randint(100000, 999999)) # Pre-generate 6 digit OTP code
     )
 
     db.add(booking)
@@ -146,6 +146,16 @@ def get_bookings(
     db: Session = Depends(get_db)
 ):
     if role == "PROVIDER":
+        user = db.query(User).filter(User.id == userId).first()
+        is_master_sim = user and user.email.lower() == "xatyammishra07@gmail.com"
+        if is_master_sim:
+            # Query IDs of all dummy professionals
+            dummy_users_ids = db.query(User.id).filter(User.email.like("%@homesphere.com")).all()
+            dummy_ids_list = [d[0] for d in dummy_users_ids]
+            return db.query(Booking).filter(
+                (Booking.provider_id == userId) | 
+                (Booking.provider_id.in_(dummy_ids_list))
+            ).order_by(Booking.created_at.desc()).all()
         return db.query(Booking).filter(Booking.provider_id == userId).order_by(Booking.created_at.desc()).all()
     return db.query(Booking).filter(Booking.customer_id == userId).order_by(Booking.created_at.desc()).all()
 
@@ -160,6 +170,12 @@ def update_booking_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Booking not found."
+        )
+
+    if dto.status == "IN_PROGRESS" and booking.status != "IN_PROGRESS":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Starting the service requires OTP verification. Please verify the customer OTP instead."
         )
 
     booking.status = dto.status
@@ -235,7 +251,7 @@ def send_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
     
-    otp = str(random.randint(1000, 9999))
+    otp = str(random.randint(100000, 999999))
     booking.otp = otp
     db.commit()
     return {

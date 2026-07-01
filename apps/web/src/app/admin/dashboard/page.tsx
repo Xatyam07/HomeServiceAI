@@ -142,7 +142,28 @@ function AdminDashboardContent() {
     { id: "P-101", name: "Rahul Verma", category: "Electrician", exp: 4, docs: "Aadhaar_PAN_Selfie.pdf", verified: false }
   ]);
 
-  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<'services' | 'cities' | 'workers' | 'trends'>('services');
+  const handleAdminBookingStatus = async (bookingId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        alert(`Booking status changed to ${newStatus} successfully!`);
+        loadAdminData();
+      } else {
+        const data = await res.json();
+        alert(`Failed to update booking: ${data.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating booking status.");
+    }
+  };
 
   // Admin Profile Photo States
   const [adminPhoto, setAdminPhoto] = useState('');
@@ -1113,6 +1134,7 @@ function AdminDashboardContent() {
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Amount</th>
                     <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900 text-slate-300">
@@ -1124,9 +1146,34 @@ function AdminDashboardContent() {
                       <td className="py-3 px-4">{b.service_type}</td>
                       <td className="py-3 px-4 font-bold text-indigo-400">₹{b.total_cost}</td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 text-[9px] bg-slate-900 border border-slate-800 text-slate-400 rounded-full font-mono uppercase font-bold">
+                        <span className={`px-2 py-0.5 text-[9px] rounded-full font-mono uppercase font-bold ${
+                          b.status === 'COMPLETED' ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/30' :
+                          b.status === 'CANCELLED' ? 'bg-red-950/60 text-red-400 border border-red-900/30' :
+                          b.status === 'SUSPENDED' ? 'bg-amber-950/60 text-amber-400 border border-amber-900/30' :
+                          'bg-slate-900 border border-slate-800 text-slate-450'
+                        }`}>
                           {b.status}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex gap-2 justify-end">
+                          {b.status !== 'CANCELLED' && b.status !== 'COMPLETED' && (
+                            <button
+                              onClick={() => handleAdminBookingStatus(b.id, 'CANCELLED')}
+                              className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900/60 text-red-450 border border-red-900/30 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                          {b.status !== 'SUSPENDED' && b.status !== 'COMPLETED' && b.status !== 'CANCELLED' && (
+                            <button
+                              onClick={() => handleAdminBookingStatus(b.id, 'SUSPENDED')}
+                              className="px-2.5 py-1 bg-amber-950/60 hover:bg-amber-900/60 text-amber-450 border border-amber-900/30 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                            >
+                              Suspend
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

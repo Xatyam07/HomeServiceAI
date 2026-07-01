@@ -17,14 +17,8 @@ from app.config import settings
 from app.firebase import firebase_service
 
 # Auto-create database tables on launch (SQLite/Postgres)
-# Propagate exceptions so that startup fails cleanly if DB setup fails (no silent fallbacks)
 Base.metadata.create_all(bind=engine)
 print("Database tables initialized successfully.")
-db = SessionLocal()
-try:
-    seed_data(db)
-finally:
-    db.close()
 
 app = FastAPI(
     title="HomeSphere AI - API Gateway & Core Services",

@@ -126,13 +126,33 @@ export default function TrackBooking() {
   }, []);
 
   useEffect(() => {
-    if (routePoints.length === 0) return;
+    if (routePoints.length === 0 || currentStatus !== 'ON_THE_WAY') return;
+    
+    // Start from beginning when transit is active
+    setTechIndex(0);
+
     const interval = setInterval(() => {
       setTechIndex((prev) => {
         const next = prev + 1;
         if (next >= routePoints.length - 1) {
-          setCurrentStatus('ARRIVED');
-          setEta(0);
+          // Notify backend technician arrived
+          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ 
+              status: 'ARRIVED', 
+              techLat: destCoords[0], 
+              techLng: destCoords[1], 
+              etaMinutes: 0 
+            })
+          }).then(() => {
+            setCurrentStatus('ARRIVED');
+            setEta(0);
+          }).catch(console.error);
+
           clearInterval(interval);
           return routePoints.length - 1;
         }
@@ -141,12 +161,30 @@ export default function TrackBooking() {
         const nextEta = Math.max(1, Math.round(remainingPct * 8));
         setEta(nextEta);
 
+        // Sync coordinates back to API periodically
+        if (next % 3 === 0) {
+          const pt = routePoints[next];
+          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ 
+              status: 'ON_THE_WAY', 
+              techLat: pt[0], 
+              techLng: pt[1], 
+              etaMinutes: nextEta 
+            })
+          }).catch(console.error);
+        }
+
         return next;
       });
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [routePoints]);
+  }, [routePoints, currentStatus, bookingId, token]);
 
   const activeTechCoords = routePoints[techIndex] || startCoords;
 

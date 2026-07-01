@@ -195,16 +195,83 @@ function ProfessionalDashboardContent() {
     return () => clearInterval(interval);
   }, [incomingJob]);
 
-  const acceptJob = () => {
+  // Monitor database bookings to pop up real jobs for simulator
+  useEffect(() => {
+    if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
+      const openJob = dbJobs.find(job => job.status === 'REQUESTED' || job.status === 'ASSIGNED');
+      if (openJob) {
+        if (!incomingJob || incomingJob.id !== openJob.id) {
+          setIncomingJob({
+            id: openJob.id,
+            customer: openJob.customer_name || "Valued Customer",
+            service: openJob.service_type,
+            address: openJob.address || "Hitec City, Hyderabad",
+            distance: "1.5 km away",
+            eta: "5 mins travel",
+            urgency: "HIGH",
+            estimatedFee: `₹${openJob.total_cost}`,
+            isRealBooking: true
+          });
+          setCountdown(30);
+        }
+      } else {
+        if (incomingJob?.isRealBooking) {
+          setIncomingJob(null);
+        }
+      }
+    }
+  }, [dbJobs, user, incomingJob]);
+
+  const acceptJob = async () => {
     if (incomingJob) {
-      // Simulate booking accept
-      alert("Job request accepted. Heading to target address!");
+      if (incomingJob.isRealBooking) {
+        try {
+          const res = await fetch(`${API_BASE}/api/bookings/${incomingJob.id}/accept`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            alert("Live Booking Accepted! Heading to target address.");
+            loadProfessionalJobs();
+          } else {
+            const data = await res.json();
+            alert(`Accept failed: ${data.detail}`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Failed to accept booking.");
+        }
+      } else {
+        alert("Simulated job request accepted. Heading to target address!");
+      }
       setIncomingJob(null);
     }
   };
 
-  const rejectJob = () => {
-    setIncomingJob(null);
+  const rejectJob = async () => {
+    if (incomingJob) {
+      if (incomingJob.isRealBooking) {
+        try {
+          const res = await fetch(`${API_BASE}/api/bookings/${incomingJob.id}/reject`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            alert("Booking request declined.");
+            loadProfessionalJobs();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      setIncomingJob(null);
+    }
   };
 
   // Wallet
