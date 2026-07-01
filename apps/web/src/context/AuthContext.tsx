@@ -71,9 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status: fbUser.email === "xatyammishra07@gmail.com" ? "APPROVED" : "ACTIVE",
         firebase_uid: fbUser.uid
       };
+      const mockToken = `mock-jwt-token-101:${mockUser.email}:${mockUser.role}`;
       setUser(mockUser);
-      setToken("mock-jwt-token-101");
-      return { user: mockUser, access_token: "mock-jwt-token-101" };
+      setToken(mockToken);
+      if (typeof window !== "undefined") {
+        localStorage.setItem('hs_token', mockToken);
+        localStorage.setItem('hs_user', JSON.stringify(mockUser));
+      }
+      return { user: mockUser, access_token: mockToken };
     }
   };
 
