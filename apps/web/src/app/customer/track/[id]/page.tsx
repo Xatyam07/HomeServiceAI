@@ -586,7 +586,7 @@ export default function TrackBooking() {
             )}
 
             {/* Payment Completed & Closed Card */}
-            {(bookingDetails?.payment_status === 'PAID' || ['PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(currentStatus)) && (
+            {['PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(currentStatus) && (
               <div className="mt-5 p-5 rounded-2xl border border-emerald-900/30 bg-gradient-to-tr from-emerald-950/20 to-teal-950/20 text-left flex flex-col gap-3 shadow-lg">
                 <div className="flex justify-between items-center text-emerald-450">
                   <div className="flex items-center gap-1.5 font-extrabold text-xs tracking-wider uppercase">

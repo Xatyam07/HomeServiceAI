@@ -323,6 +323,8 @@ function ProviderDashboardContent() {
   }, [token, user, API_BASE]);
 
   const updateJobStatus = async (bookingId: string, statusStr: string) => {
+    // Optimistically update status to prevent UI delay
+    setDbJobs(prev => prev.map(j => j.id === bookingId ? { ...j, status: statusStr } : j));
     try {
       const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
         method: 'PUT',
@@ -341,9 +343,12 @@ function ProviderDashboardContent() {
             headers: { 'Authorization': `Bearer ${token}` }
           });
         }
+      } else {
+        loadProfessionalJobs();
       }
     } catch (err) {
       console.error(err);
+      loadProfessionalJobs();
     }
   };
 
@@ -353,6 +358,8 @@ function ProviderDashboardContent() {
       alert("Please enter verification OTP.");
       return;
     }
+    // Optimistically update status to prevent UI delay
+    setDbJobs(prev => prev.map(j => j.id === bookingId ? { ...j, status: 'SERVICE_STARTED' } : j));
     try {
       const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/verify-otp`, {
         method: 'POST',
@@ -363,14 +370,15 @@ function ProviderDashboardContent() {
         body: JSON.stringify({ otp: jobOtp })
       });
       if (res.ok) {
-        alert("OTP Verified! Job started.");
         loadProfessionalJobs();
       } else {
         const data = await res.json();
         alert(`Verification failed: ${data.detail}`);
+        loadProfessionalJobs();
       }
     } catch (err) {
       console.error(err);
+      loadProfessionalJobs();
     }
   };
 
