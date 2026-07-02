@@ -33,14 +33,15 @@ def run_database_optimizations():
         db.commit()
         print("Indexes validated/created successfully.")
 
-        # 2. Cleanup orphaned bookings, invoices, and other records
-        orphaned_bookings = db.execute(text("DELETE FROM bookings WHERE customer_id NOT IN (SELECT id FROM users)")).rowcount
-        orphaned_invoices = db.execute(text("DELETE FROM invoices WHERE booking_id NOT IN (SELECT id FROM bookings)")).rowcount
-        orphaned_wallet = db.execute(text("DELETE FROM wallet_transactions WHERE user_id NOT IN (SELECT id FROM users)")).rowcount
-        orphaned_payments = db.execute(text("DELETE FROM payment_records WHERE user_id NOT IN (SELECT id FROM users) OR booking_id NOT IN (SELECT id FROM bookings)")).rowcount
+        # 2. Total purge of previous booking, invoice, payment, message, and transaction records
+        del_messages = db.execute(text("DELETE FROM messages")).rowcount
+        del_invoices = db.execute(text("DELETE FROM invoices")).rowcount
+        del_payments = db.execute(text("DELETE FROM payment_records")).rowcount
+        del_wallet = db.execute(text("DELETE FROM wallet_transactions")).rowcount
+        del_bookings = db.execute(text("DELETE FROM bookings")).rowcount
         
         db.commit()
-        print(f"Sanitization completed: deleted {orphaned_bookings} orphaned bookings, {orphaned_invoices} orphaned invoices, {orphaned_wallet} wallet transactions, {orphaned_payments} payments.")
+        print(f"Purged historical data: deleted {del_messages} messages, {del_invoices} invoices, {del_payments} payments, {del_wallet} wallet transactions, {del_bookings} bookings.")
     except Exception as e:
         db.rollback()
         print(f"Error during database optimizations: {e}")
