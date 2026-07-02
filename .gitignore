@@ -25,3 +25,10 @@ __pycache__/
 
 # Node
 node_modules/
+
+# Turbo cache
+.turbo/
+**/.turbo/
+
+# Logs
+*.log
