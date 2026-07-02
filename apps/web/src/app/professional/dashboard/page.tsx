@@ -119,7 +119,48 @@ function ProviderDashboardContent() {
   
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<'live' | 'pending' | 'accepted' | 'inprogress' | 'completed' | 'rejected' | 'history'>('pending');
+  const [activeTab, setActiveTab] = useState<'home' | 'live' | 'pending' | 'accepted' | 'inprogress' | 'completed' | 'rejected' | 'history' | 'payments' | 'settings' | 'analytics'>('home');
+  const [walletBalance, setWalletBalance] = useState(4850);
+  const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'done'>('idle');
+
+  const triggerPayout = () => {
+    setPayoutStatus('processing');
+    setTimeout(() => {
+      setWalletBalance(0);
+      setPayoutStatus('done');
+      setTimeout(() => setPayoutStatus('idle'), 2000);
+    }, 1500);
+  };
+
+  const earningsData = [
+    { day: "Mon", jobs: 2, amount: 800 },
+    { day: "Tue", jobs: 3, amount: 1250 },
+    { day: "Wed", jobs: 1, amount: 450 },
+    { day: "Thu", jobs: 4, amount: 1900 },
+    { day: "Fri", jobs: 3, amount: 1400 },
+    { day: "Sat", jobs: 5, amount: 2200 },
+    { day: "Sun", jobs: 0, amount: 0 }
+  ];
+
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '9999999999'
+  });
+
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        name: user.name || '',
+        phone: user.phone || '9999999999'
+      });
+    }
+  }, [user]);
+
+  const updateProfileSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    alert("Profile settings updated successfully!");
+  };
+
   const [jobsSubTab, setJobsSubTab] = useState<'NEW' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'OTP_PENDING' | 'SERVICE_RUNNING' | 'PAYMENT_PENDING' | 'COMPLETED' | 'CANCELLED'>('NEW');
   
   // Custom Filters & Search States for Professional Dashboard
@@ -864,13 +905,17 @@ function ProviderDashboardContent() {
       {/* Tab Navigation */}
       <div className="max-w-7xl mx-auto px-6 mt-6 flex flex-wrap gap-2 md:gap-4 border-b border-slate-900 pb-2">
         {[
+          { id: 'home', label: 'Home Feed' },
           { id: 'live', label: 'Live Bookings' },
           { id: 'pending', label: 'Pending Requests' },
           { id: 'accepted', label: 'Accepted' },
           { id: 'inprogress', label: 'In Progress' },
           { id: 'completed', label: 'Completed' },
           { id: 'rejected', label: 'Rejected' },
-          { id: 'history', label: 'History' }
+          { id: 'history', label: 'History' },
+          { id: 'payments', label: 'Payments' },
+          { id: 'analytics', label: 'Analytics' },
+          { id: 'settings', label: 'Settings' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -886,8 +931,259 @@ function ProviderDashboardContent() {
         ))}
       </div>
 
-      {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1">
+
+        {/* Home Feed Tab */}
+        {activeTab === 'home' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+            {/* Left Side: Stats & Earnings (7 cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-6">
+              
+              {/* Dashboard Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Month Earnings</span>
+                  <span className="text-xl font-bold text-emerald-400">₹{walletBalance > 0 ? (24800 + (4850 - walletBalance)) : 29650}</span>
+                  <span className="text-[9px] text-emerald-500 flex items-center gap-0.5">
+                    <TrendingUp size={10} />
+                    <span>+12% vs last month</span>
+                  </span>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Acceptance Rate</span>
+                  <span className="text-xl font-bold text-slate-200">97.8%</span>
+                  <span className="text-[9px] text-indigo-400 font-medium">Top Tier Rating</span>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Customer Rating</span>
+                  <span className="text-xl font-bold text-slate-200 flex items-center gap-1">
+                    <span>4.92</span>
+                    <Star size={16} className="fill-yellow-400 text-yellow-400" />
+                  </span>
+                  <span className="text-[9px] text-slate-500">Based on 142 reviews</span>
+                </div>
+              </div>
+
+              {/* Earnings Custom Graph */}
+              <div className="p-6 rounded-2xl glass border border-white/5">
+                <div className="flex justify-between items-center pb-4 border-b border-slate-900 mb-6">
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-300 uppercase tracking-wider">Weekly Revenue Analytics</h3>
+                    <span className="text-[10px] text-slate-500">Interactive revenue payouts per day</span>
+                  </div>
+                  <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-1 rounded-lg">
+                    Last 7 Days
+                  </span>
+                </div>
+
+                <div className="h-48 w-full flex items-end justify-between gap-2.5 pt-4">
+                  {earningsData.map((d, index) => {
+                    const maxAmount = 2200;
+                    const percent = d.amount > 0 ? (d.amount / maxAmount) * 100 : 0;
+                    return (
+                      <div key={index} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                        <span className="text-[10px] text-slate-400 font-bold font-mono">
+                          {d.amount > 0 ? `₹${d.amount}` : '-'}
+                        </span>
+                        <div className="w-full bg-slate-900 rounded-t-lg overflow-hidden relative" style={{ height: `${percent}%` }}>
+                          <div className="absolute inset-0 bg-gradient-to-t from-emerald-600 to-cyan-500 hover:opacity-80 transition-opacity rounded-t-lg" />
+                        </div>
+                        <span className="text-xs text-slate-500 font-semibold">{d.day}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Right Side: Wallet & Navigation (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col gap-6">
+              
+              {/* Payout Wallet */}
+              <div className="p-5 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+                <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">My Wallet Payouts</h3>
+                
+                <div className="p-4 rounded-xl bg-black/20 border border-slate-900 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Available Balance</span>
+                    <span className="text-2xl font-bold text-white mt-1 block">₹{walletBalance}</span>
+                  </div>
+                  <button
+                    onClick={triggerPayout}
+                    disabled={walletBalance === 0 || payoutStatus !== 'idle'}
+                    className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                  >
+                    {payoutStatus === 'processing' && 'Transferring...'}
+                    {payoutStatus === 'done' && 'Transferred!'}
+                    {payoutStatus === 'idle' && 'Instant Cashout'}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-emerald-400" />
+                    <span>Instant Payouts enabled via UPI</span>
+                  </span>
+                  <button className="hover:underline flex items-center gap-0.5">
+                    <Download size={10} />
+                    <span>Tax Reports (Form 16A)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Verification Badge */}
+              <div className="p-5 rounded-2xl bg-gradient-to-tr from-emerald-950/20 to-cyan-950/20 border border-emerald-900/30 flex gap-4 text-left">
+                <Award size={36} className="text-emerald-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-xs text-emerald-400 uppercase tracking-widest block">HomeSphere Verified Pro</span>
+                  <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">Your professional certification, background audits, and KYC files are 100% active and approved. You are eligible for emergency premium bookings.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payments Tab */}
+        {activeTab === 'payments' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+            <div className="lg:col-span-8 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Withdraw Funds</h3>
+              
+              <div className="p-6 bg-black/20 border border-slate-900 rounded-2xl flex flex-col gap-4">
+                <span className="text-xs text-slate-400">Select payout destination</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-indigo-950/20 border border-indigo-900/30 rounded-xl cursor-pointer">
+                    <span className="font-bold text-xs text-indigo-400 block">Instant UPI Transfer</span>
+                    <span className="text-[10px] text-slate-500 mt-1 block">Charges: Nil • Limit: ₹50,000/day</span>
+                  </div>
+                  <div className="p-4 bg-black/40 border border-slate-800 rounded-xl cursor-pointer">
+                    <span className="font-bold text-xs text-slate-400 block">Direct Bank Account</span>
+                    <span className="text-[10px] text-slate-500 mt-1 block">Takes 2-4 hours • NEFT/IMPS</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">UPI ID Reference</label>
+                  <input
+                    type="text"
+                    defaultValue="satyam@okaxis"
+                    className="p-3 rounded-xl border border-slate-900 bg-black/40 text-xs text-slate-200"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-4 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Transaction History</h3>
+              <div className="flex flex-col gap-3">
+                <div className="p-3 bg-black/20 border border-slate-900 rounded-lg flex justify-between text-xs">
+                  <div>
+                    <span className="font-bold block text-slate-300">Wallet Withdrawal</span>
+                    <span className="text-[9px] text-slate-500 mt-0.5 block">UPI Ref ID: 7728A1</span>
+                  </div>
+                  <span className="font-bold text-red-400">-₹4,850</span>
+                </div>
+                <div className="p-3 bg-black/20 border border-slate-900 rounded-lg flex justify-between text-xs">
+                  <div>
+                    <span className="font-bold block text-slate-300">Job Payout #9942</span>
+                    <span className="text-[9px] text-slate-500 mt-0.5 block">Completed Plumber booking</span>
+                  </div>
+                  <span className="font-bold text-emerald-400">+₹850</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+            <div className="lg:col-span-7 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Worker Reliability Analysis</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-black/20 border border-slate-900 rounded-xl">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Cancellation Rate</span>
+                  <span className="text-xl font-bold text-emerald-400">1.2%</span>
+                </div>
+                <div className="p-4 bg-black/20 border border-slate-900 rounded-xl">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Completion Rate</span>
+                  <span className="text-xl font-bold text-slate-200">98.8%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
+                <Sparkles size={16} className="text-indigo-400" />
+                <span>AI Job Suggestions</span>
+              </h3>
+              <div className="p-4 bg-indigo-950/20 border border-indigo-900/30 rounded-xl text-xs leading-relaxed text-slate-300">
+                <span className="font-bold text-indigo-400 block mb-1.5">High Demand Alert: Hitec City</span>
+                There is a 38% surge in local plumbing leak requests in Hitec City today. Consider toggling your availability and updating pricing to capitalize on active demand.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <form onSubmit={updateProfileSettings} className="p-6 rounded-2xl glass border border-white/5 flex flex-col gap-6 text-left max-w-2xl mx-auto">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">Edit Professional Profile Settings</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Full Name</label>
+                <input
+                  type="text"
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
+                  className="p-3 rounded-xl border border-slate-900 bg-black/40 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Phone Number</label>
+                <input
+                  type="text"
+                  value={profileForm.phone}
+                  onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
+                  className="p-3 rounded-xl border border-slate-900 bg-black/40 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Gender</label>
+                <select
+                  defaultValue="Male"
+                  className="p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
+                >
+                  <option value="Male" className="bg-slate-950 text-slate-200">Male</option>
+                  <option value="Female" className="bg-slate-950 text-slate-200">Female</option>
+                  <option value="Other" className="bg-slate-950 text-slate-200">Other</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Date of Birth</label>
+                <input
+                  type="date"
+                  defaultValue="1990-05-15"
+                  className="p-3 rounded-xl border border-slate-900 bg-black/40 text-xs text-slate-200 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-colors"
+            >
+              Save Profile Details
+            </button>
+          </form>
+        )}
 
         {/* Live Bookings Tab */}
         {activeTab === 'live' && (
