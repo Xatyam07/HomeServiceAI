@@ -111,12 +111,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             try:
                 msg = json.loads(data)
                 if msg.get("event") == "provider_location":
+                    booking_id = msg.get("booking_id")
+                    lat = msg.get("latitude")
+                    lng = msg.get("longitude")
+                    if booking_id:
+                        db = SessionLocal()
+                        try:
+                            from app.models import Booking
+                            from uuid import UUID
+                            booking = db.query(Booking).filter(Booking.id == UUID(booking_id)).first()
+                            if booking:
+                                booking.tech_latitude = lat
+                                booking.tech_longitude = lng
+                                db.commit()
+                        except Exception as db_err:
+                            print(f"Error updating tech location in DB: {db_err}")
+                        finally:
+                            db.close()
                     await manager.broadcast({
                         "event": "provider_location",
                         "provider_id": user_id,
-                        "latitude": msg.get("latitude"),
-                        "longitude": msg.get("longitude"),
-                        "booking_id": msg.get("booking_id")
+                        "latitude": lat,
+                        "longitude": lng,
+                        "booking_id": booking_id
                     })
             except Exception as json_err:
                 print(f"Error parsing websocket frame from {user_id}: {json_err}")

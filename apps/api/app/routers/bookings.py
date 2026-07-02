@@ -347,7 +347,11 @@ async def get_bookings(
                 (Booking.provider_id == user_uuid) |
                 (
                     ((Booking.status == "PENDING_PROVIDER") | (Booking.status == "PENDING_PROVIDER_ACCEPTANCE")) &
-                    ((Booking.provider_id == None) | (Booking.provider_id == user_uuid)) &
+                    (
+                        (Booking.provider_id == None) | 
+                        (Booking.provider_id == user_uuid) |
+                        (Booking.is_dummy_routed == True)
+                    ) &
                     (Booking.service_type.ilike(category))
                 )
             ).order_by(Booking.created_at.desc()).all()
@@ -356,7 +360,14 @@ async def get_bookings(
                 joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)
             ).filter(
                 (Booking.provider_id == user_uuid) |
-                ((Booking.status == "PENDING_PROVIDER") | (Booking.status == "PENDING_PROVIDER_ACCEPTANCE"))
+                (
+                    ((Booking.status == "PENDING_PROVIDER") | (Booking.status == "PENDING_PROVIDER_ACCEPTANCE")) &
+                    (
+                        (Booking.provider_id == None) | 
+                        (Booking.provider_id == user_uuid) |
+                        (Booking.is_dummy_routed == True)
+                    )
+                )
             ).order_by(Booking.created_at.desc()).all()
     else:
         bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
@@ -447,6 +458,7 @@ async def accept_booking(
         
     if current_user.role == "PROVIDER":
         booking.provider_id = current_user.id
+        booking.is_dummy_routed = False
         
     booking.status = "PROVIDER_ACCEPTED"
     if not booking.otp:

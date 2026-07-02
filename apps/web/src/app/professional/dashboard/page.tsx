@@ -323,7 +323,6 @@ function ProviderDashboardContent() {
             (msg.provider_id === user.id) ||
             (user.email?.toLowerCase() === 'xatyammishra07@gmail.com') ||
             (
-              !msg.provider_id &&
               user.profile &&
               user.profile.city?.toLowerCase() === msg.city?.toLowerCase() &&
               user.profile.category?.toLowerCase() === msg.service_type?.toLowerCase()
@@ -495,8 +494,7 @@ function ProviderDashboardContent() {
   useEffect(() => {
     if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
       const openJob = dbJobs.find(job => 
-        ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(job.status) &&
-        (job.customer_email === '2301641720104@psit.ac.in' || job.provider_id === user.id)
+        ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(job.status)
       );
       if (openJob) {
         if (!incomingJob || incomingJob.id !== openJob.id) {
@@ -720,23 +718,23 @@ function ProviderDashboardContent() {
               </button>
             )}
 
-            {job.status === 'ON_THE_WAY' && (
-              <button
-                onClick={() => {
-                  const customerLat = job.latitude || 26.4173;
-                  const customerLng = job.longitude || 80.3341;
-                  const dist = getDistanceInMeters(activeTechCoords[0], activeTechCoords[1], customerLat, customerLng);
-                  if (dist > 10) {
-                    alert(`Cannot mark arrived. You are still ${dist.toFixed(1)} meters away from the customer. You must be within 10 meters (Current distance: ${dist.toFixed(1)}m).`);
-                    return;
-                  }
-                  updateJobStatus(job.id, 'ARRIVED');
-                }}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
-              >
-                Mark Arrived
-              </button>
-            )}
+            {job.status === 'ON_THE_WAY' && (() => {
+              const customerLat = job.latitude || 26.4173;
+              const customerLng = job.longitude || 80.3341;
+              const dist = getDistanceInMeters(activeTechCoords[0], activeTechCoords[1], customerLat, customerLng);
+              const isWithin10m = dist <= 10;
+              return (
+                <button
+                  disabled={!isWithin10m}
+                  onClick={() => {
+                    updateJobStatus(job.id, 'ARRIVED');
+                  }}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Mark Arrived (Dist: {dist.toFixed(1)}m)
+                </button>
+              );
+            })()}
 
             {job.status === 'ARRIVED' && (
               <div className="flex flex-col gap-2">

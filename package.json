@@ -2,6 +2,7 @@
   "name": "homesphere-ai",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@10.8.2",
   "description": "HomeSphere AI Monorepo Workspace",
   "workspaces": [
     "apps/*",

@@ -166,7 +166,22 @@ export default function TrackBooking() {
         const msg = JSON.parse(event.data);
         console.log("Customer received event:", msg);
         if (msg.booking_id === bookingId || msg.booking_id === String(bookingId)) {
-          loadBookingData();
+          if (msg.event === "provider_location") {
+            setBookingDetails(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                tech_latitude: msg.latitude,
+                tech_longitude: msg.longitude
+              };
+            });
+            const dist = getDistanceInMeters(msg.latitude, msg.longitude, destCoords[0], destCoords[1]);
+            const travelTimeSeconds = Math.round(dist / 8.3);
+            setEtaSeconds(travelTimeSeconds);
+            setEta(Math.max(1, Math.round(travelTimeSeconds / 60)));
+          } else {
+            loadBookingData();
+          }
         }
       } catch (err) {
         console.error("Error parsing customer WebSocket message:", err);
@@ -256,14 +271,6 @@ export default function TrackBooking() {
         const next = prev + 1;
         if (next >= routePoints.length - 1) {
           clearInterval(interval);
-          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ status: 'ARRIVED' })
-          }).catch(console.error);
           return routePoints.length - 1;
         }
 
@@ -659,14 +666,11 @@ export default function TrackBooking() {
 
                       {/* Trigger Actions for Simulation */}
                       {step.key === 'ARRIVED' && isCurrent && (
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            onClick={verifyOtpAndStart}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
-                          >
-                            <Play size={10} />
-                            <span>Submit OTP ({otp}) & Start Job</span>
-                          </button>
+                        <div className="mt-3 p-3 rounded-xl bg-indigo-950/40 border border-indigo-900/30 text-[11px] text-slate-300 leading-relaxed max-w-md">
+                          <span className="font-extrabold text-indigo-400 block mb-1">SERVICE VERIFICATION REQUIRED</span>
+                          Share this 4-digit code with the professional to start the service: 
+                          <strong className="block text-lg text-white tracking-widest font-mono mt-1 bg-black/45 py-1 px-3.5 rounded-lg border border-slate-800 w-max">{otp}</strong>
+                          <span className="text-[10px] text-slate-500 block mt-1.5">The professional will enter this code on their dashboard to commence repairs.</span>
                         </div>
                       )}
 
