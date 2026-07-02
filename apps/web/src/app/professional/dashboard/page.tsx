@@ -686,7 +686,6 @@ function ProviderDashboardContent() {
                         headers: { 'Authorization': `Bearer ${token}` }
                       });
                       if (res.ok) {
-                        await updateJobStatus(job.id, 'ON_THE_WAY');
                         loadProfessionalJobs();
                       }
                     } catch(e) { console.error(e); }
@@ -865,10 +864,10 @@ function ProviderDashboardContent() {
       <div className="max-w-7xl mx-auto px-6 mt-6 flex flex-wrap gap-2 md:gap-4 border-b border-slate-900 pb-2">
         {[
           { id: 'home', label: 'Home Feed' },
-          { id: 'live', label: 'Live Bookings' },
-          { id: 'pending', label: 'Pending Requests' },
-          { id: 'accepted', label: 'Accepted' },
-          { id: 'inprogress', label: 'In Progress' },
+          { id: 'live', label: `Live Bookings${dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)).length > 0 ? ` (${dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)).length})` : ''}` },
+          { id: 'pending', label: `Pending Requests${dbJobs.filter(j => ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(j.status)).length > 0 ? ` (${dbJobs.filter(j => ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(j.status)).length})` : ''}` },
+          { id: 'accepted', label: `Accepted${dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(j.status)).length > 0 ? ` (${dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(j.status)).length})` : ''}` },
+          { id: 'inprogress', label: `In Progress${dbJobs.filter(j => ['SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)).length > 0 ? ` (${dbJobs.filter(j => ['SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)).length})` : ''}` },
           { id: 'completed', label: 'Completed' },
           { id: 'rejected', label: 'Rejected' },
           { id: 'history', label: 'History' },
