@@ -32,7 +32,7 @@ export default function TrackBooking() {
   const [bookingDetails, setBookingDetails] = useState<any>(null);
 
   const isOriginalPro = !!(bookingDetails?.provider?.email && 
-    bookingDetails.provider.email.toLowerCase() !== 'xatyammishra07@gmail.com');
+    bookingDetails.provider.email.toLowerCase() === 'xatyammishra07@gmail.com');
 
   const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3; // metres
@@ -255,6 +255,14 @@ export default function TrackBooking() {
         const next = prev + 1;
         if (next >= routePoints.length - 1) {
           clearInterval(interval);
+          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ status: 'ARRIVED' })
+          }).catch(console.error);
           return routePoints.length - 1;
         }
 
@@ -616,14 +624,18 @@ export default function TrackBooking() {
             <div className="flex flex-col gap-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-800">
               
               {[
-                { key: 'ACCEPTED', dbKeys: ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
-                { key: 'ON_THE_WAY', dbKeys: ['ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
-                { key: 'ARRIVED', dbKeys: ['ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
-                { key: 'IN_PROGRESS', dbKeys: ['IN_PROGRESS', 'COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
-                { key: 'COMPLETED', dbKeys: ['COMPLETED', 'PAYMENT_SUCCESSFUL'], label: 'Job Finalized', desc: 'Leakage verified resolved. GST invoice generated successfully.', time: '---' }
+                { key: 'ACCEPTED', dbKeys: ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
+                { key: 'ON_THE_WAY', dbKeys: ['ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
+                { key: 'ARRIVED', dbKeys: ['ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
+                { key: 'IN_PROGRESS', dbKeys: ['SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
+                { key: 'COMPLETED', dbKeys: ['SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Job Finalized', desc: 'Repair verified resolved. GST invoice generated successfully.', time: '---' }
               ].map((step, idx) => {
                 const isFinished = step.dbKeys.includes(currentStatus);
-                const isCurrent = currentStatus === step.key || (step.key === 'COMPLETED' && currentStatus === 'PAYMENT_SUCCESSFUL') || (step.key === 'ON_THE_WAY' && currentStatus === 'DEPARTED');
+                const isCurrent = currentStatus === step.key || 
+                  (step.key === 'ACCEPTED' && currentStatus === 'PROVIDER_ACCEPTED') ||
+                  (step.key === 'IN_PROGRESS' && currentStatus === 'SERVICE_STARTED') ||
+                  (step.key === 'COMPLETED' && ['SERVICE_COMPLETED', 'PAYMENT_COMPLETED'].includes(currentStatus)) ||
+                  (step.key === 'ON_THE_WAY' && currentStatus === 'DEPARTED');
 
                 return (
                   <div key={idx} className="flex gap-4 relative">

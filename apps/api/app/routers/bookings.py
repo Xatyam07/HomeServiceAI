@@ -23,19 +23,20 @@ router = APIRouter()
 def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     from app.seed import CITIES_COORDINATES
     
-    satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
-    if satyam_user:
-        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
-        if profile:
-            profile.category = booking.service_type
-            profile.is_available = True
-            db.commit()
-
     city = "Kanpur"
     for c in CITIES_COORDINATES:
         if c.lower() in booking.address.lower():
             city = c
             break
+
+    satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+    if satyam_user:
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
+        if profile:
+            profile.category = booking.service_type
+            profile.city = city
+            profile.is_available = True
+            db.commit()
             
     try:
         rejected_ids = json.loads(booking.rejected_providers or "[]")

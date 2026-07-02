@@ -39,9 +39,10 @@ def run_database_optimizations():
         del_payments = db.execute(text("DELETE FROM payment_records")).rowcount
         del_wallet = db.execute(text("DELETE FROM wallet_transactions")).rowcount
         del_bookings = db.execute(text("DELETE FROM bookings")).rowcount
+        del_reviews = db.execute(text("DELETE FROM reviews")).rowcount
         
         db.commit()
-        print(f"Purged historical data: deleted {del_messages} messages, {del_invoices} invoices, {del_payments} payments, {del_wallet} wallet transactions, {del_bookings} bookings.")
+        print(f"Purged historical data: deleted {del_messages} messages, {del_invoices} invoices, {del_payments} payments, {del_wallet} wallet transactions, {del_bookings} bookings, {del_reviews} reviews.")
     except Exception as e:
         db.rollback()
         print(f"Error during database optimizations: {e}")
