@@ -495,7 +495,7 @@ function ProviderDashboardContent() {
   useEffect(() => {
     if (user?.email?.toLowerCase() === 'xatyammishra07@gmail.com' && dbJobs.length > 0) {
       const openJob = dbJobs.find(job => 
-        job.status === 'PENDING_PROVIDER_ACCEPTANCE' &&
+        ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(job.status) &&
         (job.customer_email === '2301641720104@psit.ac.in' || job.provider_id === user.id)
       );
       if (openJob) {
@@ -676,7 +676,7 @@ function ProviderDashboardContent() {
           </div>
 
           <div className="flex flex-col items-stretch sm:items-end justify-end gap-3 min-w-[200px]">
-            {job.status === 'PENDING_PROVIDER' && (
+            {['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(job.status) && (
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
@@ -1168,7 +1168,7 @@ function ProviderDashboardContent() {
             </h3>
             <div className="flex flex-col gap-4">
               {(() => {
-                const list = dbJobs.filter(j => j.status === 'PENDING_PROVIDER');
+                const list = dbJobs.filter(j => ['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(j.status));
                 if (list.length === 0) return <span className="text-xs text-slate-500 italic">No pending requests available.</span>;
                 return list.map(renderJobCard);
               })()}
