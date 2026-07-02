@@ -285,8 +285,8 @@ def check_and_close_booking(booking, db: Session):
             }))
             print(f"Booking {booking.id} automatically closed/cancelled on check due to 5-minute OTP timeout.")
 
-async def auto_close_unverified_booking(booking_id_str: str):
-    await asyncio.sleep(300) # wait 5 minutes
+async def auto_close_unverified_booking(booking_id_str: str, wait_seconds: int = 300):
+    await asyncio.sleep(wait_seconds)
     from app.database import SessionLocal
     from app.models import Booking
     from app.websocket import manager
@@ -410,7 +410,8 @@ async def update_booking_status(
         booking.tech_longitude = booking.longitude
         booking.eta_minutes = 0
         booking.arrived_at = get_ist_time()
-        background_tasks.add_task(auto_close_unverified_booking, str(booking.id))
+        wait_time = 30 if booking.is_dummy_routed else 300
+        background_tasks.add_task(auto_close_unverified_booking, str(booking.id), wait_time)
 
     db.commit()
     db.refresh(booking)
