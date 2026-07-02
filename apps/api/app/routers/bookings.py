@@ -346,7 +346,7 @@ async def get_bookings(
             ).filter(
                 (Booking.provider_id == user_uuid) |
                 (
-                    (Booking.status == "PENDING_PROVIDER_ACCEPTANCE") &
+                    ((Booking.status == "PENDING_PROVIDER") | (Booking.status == "PENDING_PROVIDER_ACCEPTANCE")) &
                     ((Booking.provider_id == None) | (Booking.provider_id == user_uuid)) &
                     (Booking.service_type.ilike(category))
                 )
@@ -354,7 +354,10 @@ async def get_bookings(
         else:
             bookings = db.query(Booking).options(
                 joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)
-            ).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+            ).filter(
+                (Booking.provider_id == user_uuid) |
+                ((Booking.status == "PENDING_PROVIDER") | (Booking.status == "PENDING_PROVIDER_ACCEPTANCE"))
+            ).order_by(Booking.created_at.desc()).all()
     else:
         bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 

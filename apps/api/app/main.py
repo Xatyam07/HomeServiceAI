@@ -34,16 +34,7 @@ def run_database_optimizations():
         db.commit()
         print("Indexes validated/created successfully.")
 
-        # 2. Total purge of previous booking, invoice, payment, message, and transaction records
-        del_messages = db.execute(text("DELETE FROM messages")).rowcount
-        del_invoices = db.execute(text("DELETE FROM invoices")).rowcount
-        del_payments = db.execute(text("DELETE FROM payment_records")).rowcount
-        del_wallet = db.execute(text("DELETE FROM wallet_transactions")).rowcount
-        del_bookings = db.execute(text("DELETE FROM bookings")).rowcount
-        del_reviews = db.execute(text("DELETE FROM reviews")).rowcount
-        
-        db.commit()
-        print(f"Purged historical data: deleted {del_messages} messages, {del_invoices} invoices, {del_payments} payments, {del_wallet} wallet transactions, {del_bookings} bookings, {del_reviews} reviews.")
+        pass
     except Exception as e:
         db.rollback()
         print(f"Error during database optimizations: {e}")
