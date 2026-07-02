@@ -156,8 +156,10 @@ export default function TrackBooking() {
     loadBookingData();
     const interval = setInterval(loadBookingData, 4000);
 
-    // WebSocket connection with production fallback
-    const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + bookingId;
+    const wsBase = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+      ? 'ws://127.0.0.1:8000'
+      : (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '');
+    const wsUrl = `${wsBase}/api/ws/${bookingId}`;
     console.log("Customer WebSocket connecting:", wsUrl);
     const socket = new WebSocket(wsUrl);
 

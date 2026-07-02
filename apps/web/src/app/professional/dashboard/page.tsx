@@ -309,7 +309,10 @@ function ProviderDashboardContent() {
     loadProfessionalJobs();
 
     if (user && token) {
-      const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + user.id;
+      const wsBase = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+        ? 'ws://127.0.0.1:8000'
+        : (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '');
+      const wsUrl = `${wsBase}/api/ws/${user.id}`;
       console.log("Professional WebSocket connecting:", wsUrl);
       const socket = new WebSocket(wsUrl);
       socketRef.current = socket;
