@@ -1248,200 +1248,247 @@ function DashboardContent() {
                         })}
                         theme={theme}
                       />
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: PAY & SCHEDULE */}
+                                   {/* STEP 3: PAY & SCHEDULE */}
                 {activeStep === 3 && selectedPro && (
-                  <div className="flex flex-col gap-5 text-xs text-left">
-                    <div className="p-4 rounded-xl bg-black/20 border border-slate-900 flex flex-col gap-3">
-                      <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-                        <span className="font-bold text-slate-400">Technician Details</span>
-                        <span className="text-emerald-400 font-bold">Selected Match</span>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs text-left items-start">
+                    {/* Left Column: Form Controls */}
+                    <div className="lg:col-span-6 flex flex-col gap-5">
+                      <div className="p-4 rounded-xl bg-black/20 border border-slate-900 flex flex-col gap-3">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                          <span className="font-bold text-slate-400">Technician Details</span>
+                          <span className="text-emerald-400 font-bold">Selected Match</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Technician Name:</span>
+                          <span className="font-bold text-slate-200">{selectedPro.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Hourly Labor Rate:</span>
+                          <span className="font-bold text-slate-200">₹{selectedPro.rate}/hr</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Estimated Travel ETA:</span>
+                          <span className="font-bold text-slate-200">{selectedPro.eta} mins</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Technician Name:</span>
-                        <span className="font-bold text-slate-200">{selectedPro.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Hourly Labor Rate:</span>
-                        <span className="font-bold text-slate-200">₹{selectedPro.rate}/hr</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Estimated Travel ETA:</span>
-                        <span className="font-bold text-slate-200">{selectedPro.eta} mins</span>
-                      </div>
-                    </div>
 
-                    <div className="flex flex-col gap-3.5">
-                      <div className="flex flex-col gap-2 relative">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirm Address</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            className="flex-1 p-3 rounded-xl border border-slate-900 bg-black/20 text-slate-200 focus:outline-none focus:border-indigo-500"
-                            placeholder="Type address..."
-                          />
-                          <button
-                            onClick={() => handleAddressSearch(address)}
-                            disabled={geocoding}
-                            className="px-4 bg-indigo-655 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                          >
-                            {geocoding ? (
-                              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <Search size={14} />
-                            )}
-                            <span>Search</span>
-                          </button>
+                      <div className="flex flex-col gap-3.5">
+                        <div className="flex flex-col gap-2 relative">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Confirm Address</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={address}
+                              onChange={(e) => setAddress(e.target.value)}
+                              className="flex-1 p-3 rounded-xl border border-slate-900 bg-black/20 text-slate-200 focus:outline-none focus:border-indigo-500"
+                              placeholder="Type address..."
+                            />
+                            <button
+                              type="button"
+                              onClick={detectLiveLocation}
+                              disabled={geocoding}
+                              className="px-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 disabled:opacity-50 text-slate-350 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                              title="Detect Live Location"
+                            >
+                              <MapPin size={14} className="text-indigo-400" />
+                              <span>GPS</span>
+                            </button>
+                            <button
+                              onClick={() => handleAddressSearch(address)}
+                              disabled={geocoding}
+                              className="px-4 bg-indigo-655 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                            >
+                              {geocoding ? (
+                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Search size={14} />
+                              )}
+                              <span>Search</span>
+                            </button>
+                          </div>
+
+                          {/* Nominatim Suggestions dropdown */}
+                          {geoResults.length > 0 && (
+                            <div className="absolute top-[76px] left-0 right-0 z-45 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 flex flex-col max-h-[200px] overflow-y-auto">
+                              {geoResults.map((item, index) => (
+                                <button
+                                  key={index}
+                                  onClick={() => handleSelectAddress(item)}
+                                  className="w-full text-left p-2.5 hover:bg-slate-850 rounded-lg text-[10px] text-slate-350 leading-relaxed transition-colors border-b border-slate-950 last:border-b-0"
+                                >
+                                  {item.display_name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
-                        {/* Nominatim Suggestions dropdown */}
-                        {geoResults.length > 0 && (
-                          <div className="absolute top-[76px] left-0 right-0 z-45 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 flex flex-col max-h-[200px] overflow-y-auto">
-                            {geoResults.map((item, index) => (
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Payout Method</label>
+                          <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs shadow-lg backdrop-blur-md transition-all font-semibold"
+                          >
+                            <option value="UPI" className="bg-slate-950 text-slate-200">UPI Instant Pay (Razorpay Test Mode)</option>
+                            <option value="Card" className="bg-slate-950 text-slate-200">Visa / Mastercard (Secure Checkout)</option>
+                            <option value="Wallet" className="bg-slate-950 text-slate-200">Credits Wallet (Balance: ₹{walletBalance.toFixed(2)})</option>
+                            <option value="COD" className="bg-slate-950 text-slate-200">Pay After Service (Cash/UPI on Completion)</option>
+                            <option value="PARTIAL" className="bg-slate-950 text-slate-200">Partial Advance Deposit (10% Reservation fee)</option>
+                          </select>
+                        </div>
+
+                        {/* Coupon Code Entry */}
+                        <div className="flex flex-col gap-2 mt-1">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Apply Coupon / Referral</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="e.g. WELCOME50, REFER50, HOMESPHERE20"
+                              value={couponCode}
+                              onChange={(e) => setCouponCode(e.target.value)}
+                              className="flex-1 p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-200 uppercase focus:outline-none text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleApplyCoupon}
+                              className="px-3 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                          {couponMessage && (
+                            <div className={`text-[10px] font-bold ${couponValid ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {couponMessage}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add Tip */}
+                        <div className="flex flex-col gap-2 mt-1">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Add a Tip for Professional</label>
+                          <div className="flex gap-2">
+                            {[0, 20, 50, 100].map((t) => (
                               <button
-                                key={index}
-                                onClick={() => handleSelectAddress(item)}
-                                className="w-full text-left p-2.5 hover:bg-slate-850 rounded-lg text-[10px] text-slate-350 leading-relaxed transition-colors border-b border-slate-950 last:border-b-0"
+                                key={t}
+                                type="button"
+                                onClick={() => setTipAmount(t)}
+                                className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${tipAmount === t
+                                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                                  : 'bg-black/20 border-slate-900 text-slate-400'
+                                  }`}
                               >
-                                {item.display_name}
+                                {t === 0 ? 'No Tip' : `₹${t}`}
                               </button>
                             ))}
                           </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Payout Method</label>
-                        <select
-                          value={paymentMethod}
-                          onChange={(e) => setPaymentMethod(e.target.value)}
-                          className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/90 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs shadow-lg backdrop-blur-md transition-all font-semibold"
-                        >
-                          <option value="UPI" className="bg-slate-950 text-slate-200">UPI Instant Pay (Razorpay Test Mode)</option>
-                          <option value="Card" className="bg-slate-950 text-slate-200">Visa / Mastercard (Secure Checkout)</option>
-                          <option value="Wallet" className="bg-slate-950 text-slate-200">Credits Wallet (Balance: ₹{walletBalance.toFixed(2)})</option>
-                          <option value="COD" className="bg-slate-950 text-slate-200">Pay After Service (Cash/UPI on Completion)</option>
-                          <option value="PARTIAL" className="bg-slate-950 text-slate-200">Partial Advance Deposit (10% Reservation fee)</option>
-                        </select>
-                      </div>
-
-                      {/* Coupon Code Entry */}
-                      <div className="flex flex-col gap-2 mt-1">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Apply Coupon / Referral</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="e.g. WELCOME50, REFER50, HOMESPHERE20"
-                            value={couponCode}
-                            onChange={(e) => setCouponCode(e.target.value)}
-                            className="flex-1 p-2.5 rounded-lg border border-slate-900 bg-black/35 text-slate-200 uppercase focus:outline-none text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleApplyCoupon}
-                            className="px-3 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
-                          >
-                            Apply
-                          </button>
                         </div>
-                        {couponMessage && (
-                          <div className={`text-[10px] font-bold ${couponValid ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {couponMessage}
+                      </div>
+
+                      <div className="p-4 bg-indigo-950/25 border border-indigo-900/40 rounded-xl flex flex-col gap-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Labor Charge Estimate</span>
+                          <span>₹{selectedPro.rate}</span>
+                        </div>
+                        {isEmergency && (
+                          <div className="flex justify-between text-red-400">
+                            <span>Emergency SOS Dispatch Fee</span>
+                            <span>₹150</span>
                           </div>
                         )}
-                      </div>
-
-                      {/* Add Tip */}
-                      <div className="flex flex-col gap-2 mt-1">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Add a Tip for Professional</label>
-                        <div className="flex gap-2">
-                          {[0, 20, 50, 100].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setTipAmount(t)}
-                              className={`flex-1 py-1.5 rounded-lg border text-xs font-bold transition-all ${tipAmount === t
-                                ? 'bg-indigo-600 border-indigo-500 text-white'
-                                : 'bg-black/20 border-slate-900 text-slate-400'
-                                }`}
-                            >
-                              {t === 0 ? 'No Tip' : `₹${t}`}
-                            </button>
-                          ))}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Service CGST + SGST (18%)</span>
+                          <span>₹{isEmergency ? Math.round((selectedPro.rate + 150) * 0.18) : Math.round(selectedPro.rate * 0.18)}</span>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-indigo-950/25 border border-indigo-900/40 rounded-xl flex flex-col gap-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Labor Charge Estimate</span>
-                        <span>₹{selectedPro.rate}</span>
-                      </div>
-                      {isEmergency && (
-                        <div className="flex justify-between text-red-400">
-                          <span>Emergency SOS Dispatch Fee</span>
-                          <span>₹150</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Service CGST + SGST (18%)</span>
-                        <span>₹{isEmergency ? Math.round((selectedPro.rate + 150) * 0.18) : Math.round(selectedPro.rate * 0.18)}</span>
-                      </div>
-                      {discountAmount > 0 && (
-                        <div className="flex justify-between text-emerald-400">
-                          <span>Coupon Discount Applied</span>
-                          <span>-₹{discountAmount}</span>
-                        </div>
-                      )}
-                      {tipAmount > 0 && (
-                        <div className="flex justify-between text-indigo-400">
-                          <span>Technician Tip</span>
-                          <span>+₹{tipAmount}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-sm text-slate-200">
-                        <span>Total Estimated Payment</span>
-                        <span className="text-indigo-400">
-                          ₹{Math.max(
-                            (isEmergency
-                              ? Math.round((selectedPro.rate + 150) * 1.18)
-                              : Math.round(selectedPro.rate * 1.18)) - discountAmount + tipAmount,
-                            0.0
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => setActiveStep(2)}
-                        className="flex-1 py-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-semibold rounded-xl text-xs transition-colors"
-                      >
-                        Back
-                      </button>
-                      <button
-                        onClick={handlePayment}
-                        disabled={isPaying}
-                        className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-colors"
-                      >
-                        {isPaying ? (
-                          <>
-                            <div className="w-4.5 h-4.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Processing Payment...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard size={15} />
-                            <span>Confirm & Pay Now</span>
-                          </>
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between text-emerald-400">
+                            <span>Coupon Discount Applied</span>
+                            <span>-₹{discountAmount}</span>
+                          </div>
                         )}
-                      </button>
+                        {tipAmount > 0 && (
+                          <div className="flex justify-between text-indigo-400">
+                            <span>Technician Tip</span>
+                            <span>+₹{tipAmount}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-sm text-slate-200">
+                          <span>Total Estimated Payment</span>
+                          <span className="text-indigo-400">
+                            ₹{Math.max(
+                              (isEmergency
+                                ? Math.round((selectedPro.rate + 150) * 1.18)
+                                : Math.round(selectedPro.rate * 1.18)) - discountAmount + tipAmount,
+                              0.0
+                            ).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-4">
+                        <button
+                          onClick={() => setActiveStep(2)}
+                          className="flex-1 py-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-semibold rounded-xl text-xs transition-colors"
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={handlePayment}
+                          disabled={isPaying}
+                          className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition-colors"
+                        >
+                          {isPaying ? (
+                            <>
+                              <div className="w-4.5 h-4.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Processing Payment...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard size={15} />
+                              <span>Confirm & Pay Now</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Leaflet Map Panel */}
+                    <div className="lg:col-span-6 w-full h-[400px] lg:h-[500px]">
+                      <MapComponent
+                        center={custCoords}
+                        customerMarker={custCoords}
+                        onMapClick={async (lat, lng) => {
+                          setCustCoords([lat, lng]);
+                          try {
+                            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                            if (response.ok) {
+                              const data = await response.json();
+                              setAddress(data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                            } else {
+                              setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                            }
+                          } catch (err) {
+                            console.error("Reverse geocoding failed:", err);
+                            setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                          }
+                        }}
+                        providerMarkers={[
+                          {
+                            id: selectedPro.id || "selected",
+                            lat: getProCoords(selectedPro, 0)[0],
+                            lng: getProCoords(selectedPro, 0)[1],
+                            name: selectedPro.name,
+                            category: selectedService,
+                            rate: selectedPro.rate || 350,
+                            rating: selectedPro.rating || 4.8
+                          }
+                        ]}
+                        theme={theme}
+                      />
+                    </div>
+                  </div>
+                )}
                     </div>
                   </div>
                 )}

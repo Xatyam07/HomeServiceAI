@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status: fbUser.email === "xatyammishra07@gmail.com" ? "APPROVED" : "ACTIVE",
         firebase_uid: fbUser.uid
       };
-      const mockToken = `mock-jwt-token-101:${mockUser.email}:${mockUser.role}`;
+      const mockToken = `mock-jwt-token-101:${mockUser.email}:${mockUser.role}:${mockUser.id}`;
       setUser(mockUser);
       setToken(mockToken);
       if (typeof window !== "undefined") {
