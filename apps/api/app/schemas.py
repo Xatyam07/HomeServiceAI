@@ -106,6 +106,7 @@ class BookingResponse(BaseModel):
     payment_status: str
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
     has_review: bool = False
     created_at: datetime
 

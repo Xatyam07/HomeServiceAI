@@ -293,14 +293,14 @@ async def get_bookings(
         if is_master_sim:
             dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.%")).all()
             dummy_ids_list = [d[0] for d in dummy_users_ids]
-            bookings = db.query(Booking).options(joinedload(Booking.review)).filter(
+            bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(
                 (Booking.provider_id == user_uuid) | 
                 (Booking.provider_id.in_(dummy_ids_list))
             ).order_by(Booking.created_at.desc()).all()
         else:
-            bookings = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+            bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
     else:
-        bookings = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
+        bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 
     for b in bookings:
         check_and_close_booking(b, db)
@@ -370,7 +370,7 @@ async def update_booking_status(
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking_details(booking_id: UUID, db: Session = Depends(get_db)):
-    booking = db.query(Booking).options(joinedload(Booking.review)).filter(Booking.id == booking_id).first()
+    booking = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
     check_and_close_booking(booking, db)
@@ -476,7 +476,7 @@ async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Se
     if booking.otp != payload.otp:
         raise HTTPException(status_code=400, detail="Incorrect verification OTP code. Please try again.")
         
-    booking.status = "SERVICE_STARTED"
+    booking.status = "IN_PROGRESS"
     booking.otp_verified_at = get_ist_time()
     db.commit()
     db.refresh(booking)

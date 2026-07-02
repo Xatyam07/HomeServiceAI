@@ -455,7 +455,7 @@ def seed_data(db: Session):
                 booking_id=b_id,
                 gst_amount=gst,
                 total_paid=total,
-                pdf_url=f"http://localhost:8000/static/uploads/invoice_{b_id}.pdf",
+                pdf_url=f"/static/uploads/invoice_{b_id}.pdf",
                 created_at=scheduled
             )
             invoices_to_save.append(invoice)

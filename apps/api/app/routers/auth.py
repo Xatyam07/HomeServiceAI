@@ -30,7 +30,9 @@ def verify_firebase_token(payload: UserVerifyToken, db: Session = Depends(get_db
         )
 
     # 2. Check if user already registered in PostgreSQL by UID or Email
-    db_user = db.query(User).options(joinedload(User.profile)).filter((User.firebase_uid == uid) | (User.email == email)).first()
+    db_user = db.query(User).options(joinedload(User.profile)).filter(User.firebase_uid == uid).first()
+    if not db_user:
+        db_user = db.query(User).options(joinedload(User.profile)).filter(User.email == email).first()
     
     if not db_user:
         # Enforce role mapping rules

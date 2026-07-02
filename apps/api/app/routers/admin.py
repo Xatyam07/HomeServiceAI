@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import User, ProviderProfile, Booking, Review, PaymentRecord, WalletTransaction
 from uuid import UUID
@@ -26,9 +27,10 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     total_payments = db.query(PaymentRecord).count()
     cities_covered = db.query(ProviderProfile.city).distinct().count()
     
-    # Financial metrics
-    completed_bookings = db.query(Booking).filter(Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])).all()
-    monthly_rev = sum(b.total_cost for b in completed_bookings)
+    # Financial metrics - Optimized aggregate sum
+    monthly_rev = db.query(func.sum(Booking.total_cost)).filter(
+        Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])
+    ).scalar() or 0.0
     
     # Bookings count today
     today_start = get_ist_time().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -39,28 +41,26 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     reviews_count = db.query(Review).count()
     fraud_reviews = db.query(Review).filter(Review.is_flagged == True).count()
     
-    # Recent Bookings list
-    recent_bookings_objs = db.query(Booking).order_by(Booking.created_at.desc()).limit(5).all()
+    # Recent Bookings list - Optimized joinedload
+    recent_bookings_objs = db.query(Booking).options(joinedload(Booking.customer)).order_by(Booking.created_at.desc()).limit(5).all()
     recent_bookings = []
     for b in recent_bookings_objs:
-        customer = db.query(User).filter(User.id == b.customer_id).first()
         recent_bookings.append({
             "id": str(b.id),
-            "customer": customer.name if customer else "Unknown",
+            "customer": b.customer.name if b.customer else "Unknown",
             "service": b.service_type,
             "status": b.status,
             "totalCost": b.total_cost,
             "time": b.created_at.strftime("%I:%M %p")
         })
 
-    # Recent Payments list
-    recent_payments_objs = db.query(PaymentRecord).order_by(PaymentRecord.created_at.desc()).limit(5).all()
+    # Recent Payments list - Optimized joinedload
+    recent_payments_objs = db.query(PaymentRecord).options(joinedload(PaymentRecord.user)).order_by(PaymentRecord.created_at.desc()).limit(5).all()
     recent_payments = []
     for p in recent_payments_objs:
-        user = db.query(User).filter(User.id == p.user_id).first()
         recent_payments.append({
             "id": str(p.id),
-            "customer": user.name if user else "Unknown",
+            "customer": p.user.name if p.user else "Unknown",
             "amount": p.amount,
             "status": p.status,
             "orderId": p.razorpay_order_id
@@ -69,8 +69,8 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     # 1. Service wise analytics
     service_stats = db.query(
         Booking.service_type,
-        db.func.count(Booking.id),
-        db.func.sum(Booking.total_cost)
+        func.count(Booking.id),
+        func.sum(Booking.total_cost)
     ).group_by(Booking.service_type).all()
     service_wise = [
         {"service": row[0], "count": row[1], "revenue": float(row[2] or 0)}
@@ -80,26 +80,36 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
     # 2. City wise analytics
     city_stats = db.query(
         ProviderProfile.city,
-        db.func.count(ProviderProfile.id)
+        func.count(ProviderProfile.id)
     ).group_by(ProviderProfile.city).all()
     city_wise = [
         {"city": row[0] or "Hyderabad", "activePros": row[1]}
         for row in city_stats
     ]
 
-    # 3. Worker performance
+    # 3. Worker performance - Optimized count batching
     top_workers = db.query(User, ProviderProfile).join(
         ProviderProfile, User.id == ProviderProfile.user_id
     ).order_by(ProviderProfile.rating.desc()).limit(5).all()
+    
+    worker_ids = [w_user.id for w_user, _ in top_workers]
+    completed_counts = db.query(
+        Booking.provider_id,
+        func.count(Booking.id)
+    ).filter(
+        Booking.provider_id.in_(worker_ids),
+        Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])
+    ).group_by(Booking.provider_id).all()
+    counts_map = {row[0]: row[1] for row in completed_counts}
+
     worker_perf = []
     for w_user, w_prof in top_workers:
-        completed_cnt = db.query(Booking).filter(Booking.provider_id == w_user.id, Booking.status.in_(["COMPLETED", "SERVICE_COMPLETED", "PAYMENT_COMPLETED", "CLOSED"])).count()
         worker_perf.append({
             "name": w_user.name,
             "category": w_prof.category,
             "rating": w_prof.rating,
             "successRate": w_prof.success_rate,
-            "completed": completed_cnt
+            "completed": counts_map.get(w_user.id, 0)
         })
 
     # 4. Trends aggregates
@@ -155,6 +165,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user: User 
         "bookingTrends": booking_trends,
         "complaints": complaints
     }
+
 
 # 2. List Pending/All Professionals for Verification View
 @router.get("/workers")
@@ -837,4 +848,69 @@ async def assign_booking(booking_id: UUID, dto: AssignBookingSchema, db: Session
     })
     
     return {"status": "SUCCESS", "message": f"Booking successfully assigned to {provider.name}."}
+
+# 21. Suspend Booking
+@router.put("/bookings/{booking_id}/suspend")
+async def suspend_booking(booking_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+    
+    if booking.status.startswith("SUSPENDED:"):
+        return {"status": "SUCCESS", "message": "Booking is already suspended.", "booking": booking}
+        
+    booking.status = f"SUSPENDED:{booking.status}"
+    db.commit()
+    db.refresh(booking)
+    
+    from app.websocket import manager
+    await manager.broadcast({
+        "event": "booking_updated",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    return {"status": "SUCCESS", "message": "Booking has been suspended.", "booking": booking}
+
+# 22. Resume Booking
+@router.put("/bookings/{booking_id}/resume")
+async def resume_booking(booking_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+        
+    if not booking.status.startswith("SUSPENDED:"):
+        return {"status": "SUCCESS", "message": "Booking is not suspended.", "booking": booking}
+        
+    original_status = booking.status.replace("SUSPENDED:", "", 1)
+    booking.status = original_status
+    db.commit()
+    db.refresh(booking)
+    
+    from app.websocket import manager
+    await manager.broadcast({
+        "event": "booking_updated",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    return {"status": "SUCCESS", "message": "Booking has been resumed.", "booking": booking}
+
+# 23. Cancel Booking
+@router.put("/bookings/{booking_id}/cancel")
+async def cancel_booking(booking_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+        
+    booking.status = "CANCELLED"
+    db.commit()
+    db.refresh(booking)
+    
+    from app.websocket import manager
+    await manager.broadcast({
+        "event": "booking_updated",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    return {"status": "SUCCESS", "message": "Booking has been cancelled.", "booking": booking}
+
 

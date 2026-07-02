@@ -124,8 +124,8 @@ class Booking(Base):
         return self.customer.email if self.customer else None
 
     @property
-    def customer_name(self):
-        return self.customer.name if self.customer else None
+    def customer_phone(self):
+        return self.customer.phone if self.customer else None
 
     @property
     def has_review(self):

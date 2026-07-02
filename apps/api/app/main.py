@@ -21,6 +21,35 @@ from app.firebase import firebase_service
 Base.metadata.create_all(bind=engine)
 print("Database tables initialized successfully.")
 
+def run_database_optimizations():
+    print("Running database indexes optimization and data sanitization...")
+    db = SessionLocal()
+    try:
+        # 1. Create indexes
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_bookings_status_created ON bookings(status, created_at DESC)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_provider_profiles_city_category ON provider_profiles(city, category)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_payment_records_status ON payment_records(status)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status)"))
+        db.commit()
+        print("Indexes validated/created successfully.")
+
+        # 2. Cleanup orphaned bookings, invoices, and other records
+        orphaned_bookings = db.execute(text("DELETE FROM bookings WHERE customer_id NOT IN (SELECT id FROM users)")).rowcount
+        orphaned_invoices = db.execute(text("DELETE FROM invoices WHERE booking_id NOT IN (SELECT id FROM bookings)")).rowcount
+        orphaned_wallet = db.execute(text("DELETE FROM wallet_transactions WHERE user_id NOT IN (SELECT id FROM users)")).rowcount
+        orphaned_payments = db.execute(text("DELETE FROM payment_records WHERE user_id NOT IN (SELECT id FROM users) OR booking_id NOT IN (SELECT id FROM bookings)")).rowcount
+        
+        db.commit()
+        print(f"Sanitization completed: deleted {orphaned_bookings} orphaned bookings, {orphaned_invoices} orphaned invoices, {orphaned_wallet} wallet transactions, {orphaned_payments} payments.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error during database optimizations: {e}")
+    finally:
+        db.close()
+
+run_database_optimizations()
+
+
 app = FastAPI(
     title="HomeSphere AI - API Gateway & Core Services",
     version="1.0.0",
@@ -58,12 +87,12 @@ if settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.C
     except Exception as e:
         print(f"Warning: Cloudinary configuration failed during startup: {e}")
 
-# Mount static folder only if it exists
-static_dir = "/code/static"
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-else:
-    print("Warning: /code/static does not exist. Skipping mounting static files.")
+# Setup relative static folders and auto-create them at startup
+static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+uploads_dir = os.path.join(static_dir, "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+print(f"Static folder mounted and verified at: {static_dir}")
 
 # AI Routers
 app.include_router(diagnosis.router, prefix="/api/ai/diagnose", tags=["AI Diagnosis"])

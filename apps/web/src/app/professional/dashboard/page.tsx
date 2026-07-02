@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Zap, Wrench, Sparkles, User, MapPin, Clock, Star, 
@@ -117,8 +117,15 @@ function ProviderDashboardContent() {
   
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'wallet' | 'settings' | 'performance'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'live' | 'completed' | 'rejected' | 'history' | 'payments' | 'analytics'>('home');
   const [jobsSubTab, setJobsSubTab] = useState<'NEW' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'OTP_PENDING' | 'SERVICE_RUNNING' | 'PAYMENT_PENDING' | 'COMPLETED' | 'CANCELLED'>('NEW');
+  
+  // Custom Filters & Search States for Professional Dashboard
+  const [filterState, setFilterState] = useState('');
+  const [filterCity, setFilterCity] = useState('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [dbJobs, setDbJobs] = useState<any[]>([]);
 
   // Simulated en-route coordinates map tracker
@@ -161,6 +168,8 @@ function ProviderDashboardContent() {
 
   const hasOnTheWay = dbJobs.some(j => j.status === 'ON_THE_WAY');
 
+  const socketRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
     if (routePoints.length === 0 || !hasOnTheWay) return;
     
@@ -168,15 +177,29 @@ function ProviderDashboardContent() {
     const interval = setInterval(() => {
       setTechIndex((prev) => {
         const next = prev + 1;
+        
+        // Broadcast location updates
+        const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
+        const pt = routePoints[next] || routePoints[routePoints.length - 1];
+        if (activeWayJob && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({
+            event: "provider_location",
+            latitude: pt[0],
+            longitude: pt[1],
+            booking_id: activeWayJob.id,
+            eta_minutes: Math.max(1, Math.round(15 - next))
+          }));
+        }
+
         if (next >= routePoints.length - 1) {
           clearInterval(interval);
           return routePoints.length - 1;
         }
         return next;
       });
-    }, 500);
+    }, 1000); // 1 second intervals for 15 seconds
     return () => clearInterval(interval);
-  }, [hasOnTheWay, routePoints]);
+  }, [hasOnTheWay, routePoints, dbJobs]);
 
   const [etaSeconds, setEtaSeconds] = useState(15);
 
@@ -188,7 +211,7 @@ function ProviderDashboardContent() {
       setEtaSeconds(s => {
         if (s <= 1) {
           clearInterval(secInterval);
-          updateJobStatus(activeWayJob.id, 'ARRIVED');
+          // Arrived at destination visually, wait for professional click
           return 0;
         }
         return s - 1;
@@ -267,15 +290,12 @@ function ProviderDashboardContent() {
 
   useEffect(() => {
     loadProfessionalJobs();
-    const interval = setInterval(loadProfessionalJobs, 5000);
 
     if (user && token) {
-      const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${user.id}`;
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
-        ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${user.id}`
-        : defaultWsUrl;
+      const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + user.id;
       console.log("Professional WebSocket connecting:", wsUrl);
       const socket = new WebSocket(wsUrl);
+      socketRef.current = socket;
 
       socket.onmessage = (event) => {
         try {
@@ -305,7 +325,7 @@ function ProviderDashboardContent() {
             setCountdown(30);
           }
           
-          if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed") {
+          if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed" || msg.event === "otp_verified" || msg.event === "service_completed") {
             loadProfessionalJobs();
           }
         } catch (err) {
@@ -315,11 +335,9 @@ function ProviderDashboardContent() {
 
       return () => {
         socket.close();
-        clearInterval(interval);
+        socketRef.current = null;
       };
     }
-
-    return () => clearInterval(interval);
   }, [token, user, API_BASE]);
 
   const updateJobStatus = async (bookingId: string, statusStr: string) => {
@@ -564,6 +582,38 @@ function ProviderDashboardContent() {
     }, 1500);
   };
 
+  const getFilteredJobs = (jobsList: any[]) => {
+    if (!jobsList) return [];
+    return jobsList.filter(job => {
+      if (filterState && job.state && !job.state.toLowerCase().includes(filterState.toLowerCase())) return false;
+      
+      if (filterCity) {
+        const c = job.city || 'hyderabad';
+        if (!c.toLowerCase().includes(filterCity.toLowerCase())) return false;
+      }
+
+      if (filterRole) {
+        const r = job.role || 'PROVIDER';
+        if (!r.toLowerCase().includes(filterRole.toLowerCase())) return false;
+      }
+
+      if (filterStatus && job.status && !job.status.toLowerCase().includes(filterStatus.toLowerCase())) return false;
+
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesId = job.id?.toLowerCase().includes(query);
+        const matchesCustomer = job.customer_name?.toLowerCase().includes(query);
+        const matchesPhone = job.customer_phone?.toLowerCase().includes(query);
+        const matchesProvider = job.provider_name?.toLowerCase().includes(query);
+        
+        if (!matchesId && !matchesCustomer && !matchesPhone && !matchesProvider) {
+          return false;
+        }
+      }
+      return true;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col grid-bg text-left">
       {/* Header */}
@@ -611,18 +661,21 @@ function ProviderDashboardContent() {
       </header>
 
       {/* Tab Navigation */}
-      <div className="max-w-7xl mx-auto px-6 mt-6 flex gap-4 border-b border-slate-900 pb-2">
+      <div className="max-w-7xl mx-auto px-6 mt-6 flex flex-wrap gap-2 md:gap-4 border-b border-slate-900 pb-2">
         {[
           { id: 'home', label: 'Home Feed' },
           { id: 'jobs', label: 'Assigned Jobs' },
-          { id: 'wallet', label: 'Wallet & Payouts' },
-          { id: 'settings', label: 'Edit Profile' },
-          { id: 'performance', label: 'Performance & AI' }
+          { id: 'live', label: 'Live Bookings' },
+          { id: 'completed', label: 'Completed' },
+          { id: 'rejected', label: 'Rejected' },
+          { id: 'history', label: 'History' },
+          { id: 'payments', label: 'Payments' },
+          { id: 'analytics', label: 'Analytics' }
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-2 text-xs font-bold uppercase transition-all border-b-2 ${
+            className={`px-3 py-2 text-[10px] md:text-xs font-bold uppercase transition-all border-b-2 ${
               activeTab === tab.id
                 ? 'border-indigo-500 text-white'
                 : 'border-transparent text-slate-500 hover:text-slate-300'
@@ -635,6 +688,101 @@ function ProviderDashboardContent() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1">
+        {/* Global Filter Bar */}
+        {['jobs', 'live', 'completed', 'rejected', 'history'].includes(activeTab) && (
+          <div className="mb-6 p-4 rounded-xl bg-slate-950/60 border border-slate-900/60 flex flex-col md:flex-row md:items-center gap-4 text-left">
+            <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
+              {/* Search input */}
+              <div className="col-span-2 md:col-span-1 flex flex-col gap-1">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Search</label>
+                <input
+                  type="text"
+                  placeholder="ID, Customer, Phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+              {/* State Filter */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">State</label>
+                <select
+                  value={filterState}
+                  onChange={(e) => setFilterState(e.target.value)}
+                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="">All States</option>
+                  <option value="Telangana">Telangana</option>
+                  <option value="Karnataka">Karnataka</option>
+                  <option value="Maharashtra">Maharashtra</option>
+                  <option value="Delhi">Delhi</option>
+                </select>
+              </div>
+              {/* City Filter */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">City</label>
+                <select
+                  value={filterCity}
+                  onChange={(e) => setFilterCity(e.target.value)}
+                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="">All Cities</option>
+                  <option value="Hyderabad">Hyderabad</option>
+                  <option value="Bengaluru">Bengaluru</option>
+                  <option value="Mumbai">Mumbai</option>
+                  <option value="Delhi">Delhi</option>
+                </select>
+              </div>
+              {/* Role Filter */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Role</label>
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="">All Roles</option>
+                  <option value="CUSTOMER">Customer</option>
+                  <option value="PROVIDER">Professional</option>
+                </select>
+              </div>
+              {/* Status Filter */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="REQUESTED">Requested</option>
+                  <option value="ACCEPTED">Accepted</option>
+                  <option value="ON_THE_WAY">On The Way</option>
+                  <option value="ARRIVED">Arrived</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            
+            {(searchQuery || filterState || filterCity || filterRole || filterStatus) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterState('');
+                  setFilterCity('');
+                  setFilterRole('');
+                  setFilterStatus('');
+                }}
+                className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/20 text-rose-400 border border-rose-900/30 rounded-lg text-xs font-bold transition-all"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
         {activeTab === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Left Side: Stats & Earnings (7 cols) */}
@@ -809,7 +957,7 @@ function ProviderDashboardContent() {
                 { id: 'COMPLETED', label: 'Completed' },
                 { id: 'CANCELLED', label: 'Cancelled' }
               ].map((sub) => {
-                const count = dbJobs.filter(j => {
+                const count = getFilteredJobs(dbJobs).filter(j => {
                   if (sub.id === 'NEW') return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(j.status);
                   if (sub.id === 'ACCEPTED') return j.status === 'ACCEPTED';
                   if (sub.id === 'ON_THE_WAY') return j.status === 'ON_THE_WAY';
@@ -837,10 +985,10 @@ function ProviderDashboardContent() {
                 );
               })}
             </div>
-
+ 
             <div className="flex flex-col gap-4">
               {(() => {
-                const filteredJobs = dbJobs.filter(job => {
+                const filteredJobs = getFilteredJobs(dbJobs).filter(job => {
                   switch (jobsSubTab) {
                     case 'NEW':
                       return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(job.status);
@@ -988,7 +1136,7 @@ function ProviderDashboardContent() {
                         </div>
                       )}
 
-                      {job.status === 'SERVICE_STARTED' && (
+                      {['SERVICE_STARTED', 'IN_PROGRESS'].includes(job.status) && (
                         <button
                           onClick={async () => {
                             try {
@@ -1001,7 +1149,7 @@ function ProviderDashboardContent() {
                           }}
                           className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
                         >
-                          Complete Service
+                          Finish Job
                         </button>
                       )}
 
@@ -1023,8 +1171,189 @@ function ProviderDashboardContent() {
           </div>
         )}
 
-        {/* Wallet tab */}
-        {activeTab === 'wallet' && (
+        {/* Live Bookings Tab */}
+        {activeTab === 'live' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Live Bookings in Progress
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const liveJobs = getFilteredJobs(dbJobs).filter(j => 
+                  ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)
+                );
+                if (liveJobs.length === 0) {
+                  return <span className="text-xs text-slate-500 italic">No live bookings in progress.</span>;
+                }
+                return liveJobs.map(job => (
+                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex gap-4 items-start">
+                      <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mt-1">
+                        <Zap size={18} className="animate-pulse" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                            {job.status}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">{job.address}</span>
+                        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+                          <span>Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
+                          <span>•</span>
+                          <span>Phone: <strong>{job.customer_phone || 'N/A'}</strong></span>
+                          <span>•</span>
+                          <span className="font-mono text-[9px] bg-slate-900/60 px-1.5 py-0.5 rounded text-slate-500">ID: {job.id.substring(0, 8)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-sm text-white mr-4">₹{job.total_cost}</span>
+                      <Link
+                        href={`/customer/track/${job.id}`}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all"
+                      >
+                        Track Progress
+                      </Link>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Completed Bookings Tab */}
+        {activeTab === 'completed' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Completed Service History
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const completedJobs = getFilteredJobs(dbJobs).filter(j => 
+                  ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED', 'SERVICE_COMPLETED'].includes(j.status)
+                );
+                if (completedJobs.length === 0) {
+                  return <span className="text-xs text-slate-500 italic">No completed bookings.</span>;
+                }
+                return completedJobs.map(job => (
+                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex gap-4 items-start">
+                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mt-1">
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-wider">
+                            COMPLETED
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">{job.address}</span>
+                        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
+                          <span>Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
+                          <span>•</span>
+                          <span>Payment: <strong className="text-emerald-400">{job.payment_status}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-sm text-slate-300">₹{job.total_cost}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Rejected Bookings Tab */}
+        {activeTab === 'rejected' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Rejected / Cancelled Bookings
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const rejectedJobs = getFilteredJobs(dbJobs).filter(j => 
+                  ['REJECTED', 'CANCELLED'].includes(j.status)
+                );
+                if (rejectedJobs.length === 0) {
+                  return <span className="text-xs text-slate-500 italic">No rejected or cancelled bookings.</span>;
+                }
+                return rejectedJobs.map(job => (
+                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex gap-4 items-start">
+                      <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 mt-1">
+                        <AlertTriangle size={18} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[9px] font-bold uppercase tracking-wider">
+                            {job.status}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">{job.address}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-sm text-rose-400/80">₹{job.total_cost}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              All Booking History (Searchable)
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const historyJobs = getFilteredJobs(dbJobs);
+                if (historyJobs.length === 0) {
+                  return <span className="text-xs text-slate-500 italic">No bookings found in history matching filters.</span>;
+                }
+                return historyJobs.map(job => (
+                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex gap-4 items-start">
+                      <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800 text-slate-400 mt-1">
+                        <Clock size={18} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold uppercase tracking-wider">
+                            {job.status}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">{job.address}</span>
+                        <span className="text-[10px] text-slate-400 mt-1">Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-sm text-slate-300">₹{job.total_cost}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Payments tab */}
+        {activeTab === 'payments' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
             <div className="lg:col-span-8 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
               <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Withdraw Funds</h3>
@@ -1245,8 +1574,8 @@ function ProviderDashboardContent() {
           </form>
         )}
 
-        {/* Performance & AI Tab */}
-        {activeTab === 'performance' && (
+        {/* Analytics & AI Tab */}
+        {activeTab === 'analytics' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
             <div className="lg:col-span-7 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
               <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Worker Reliability Analysis</h3>
@@ -1569,11 +1898,8 @@ function AdminManagementDashboard() {
   useEffect(() => {
     if (!user || !token) return;
     
-    // Connect to WebSocket dynamically
-    const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${user.id}`;
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
-      ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${user.id}`
-      : defaultWsUrl;
+    // Connect to WebSocket dynamically with production fallback
+    const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + user.id;
 
     console.log("Admin WebSocket connected:", wsUrl);
     const socket = new WebSocket(wsUrl);
@@ -1583,9 +1909,19 @@ function AdminManagementDashboard() {
         const msg = JSON.parse(event.data);
         console.log("Admin Dashboard live update event:", msg);
         
-        // Refresh appropriate lists depending on event
-        fetchActiveBookings();
-        fetchWorkers();
+        if (msg.event === "provider_location") {
+          if (selectedBooking && msg.booking_id === selectedBooking.id) {
+            setSelectedBooking(prev => prev ? {
+              ...prev,
+              tech_latitude: msg.latitude,
+              tech_longitude: msg.longitude
+            } : null);
+          }
+        } else {
+          // Refresh appropriate lists depending on event
+          fetchActiveBookings();
+          fetchWorkers();
+        }
       } catch (err) {
         console.error("Error parsing admin WebSocket message:", err);
       }
@@ -2024,12 +2360,13 @@ function AdminManagementDashboard() {
                     <th className="p-3.5">Payment Status</th>
                     <th className="p-3.5">Live Timer</th>
                     <th className="p-3.5">Track</th>
+                    <th className="p-3.5 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {activeBookings.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center py-10 text-slate-500 text-xs">
+                      <td colSpan={12} className="text-center py-10 text-slate-500 text-xs">
                         No active service bookings currently dispatching.
                       </td>
                     </tr>
@@ -2059,12 +2396,13 @@ function AdminManagementDashboard() {
                           </td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              b.status.startsWith('SUSPENDED:') ? 'bg-amber-950/80 border border-amber-900/30 text-amber-500 font-extrabold animate-pulse' :
                               b.status === 'PENDING_PROVIDER_ACCEPTANCE' ? 'bg-amber-950/80 border border-amber-900/30 text-amber-400' :
                               b.status === 'ON_THE_WAY' ? 'bg-sky-950/80 border border-sky-900/30 text-sky-400' :
                               b.status === 'ARRIVED' ? 'bg-indigo-950/80 border border-indigo-900/30 text-indigo-400' :
                               'bg-emerald-950/80 border border-emerald-900/30 text-emerald-400'
                             }`}>
-                              {b.status.replace(/_/g, ' ')}
+                              {b.status.startsWith('SUSPENDED:') ? 'SUSPENDED' : b.status.replace(/_/g, ' ')}
                             </span>
                           </td>
                           <td className="p-3">
@@ -2086,6 +2424,63 @@ function AdminManagementDashboard() {
                               className="px-2.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold font-sans transition-colors"
                             >
                               Track
+                            </button>
+                          </td>
+                          <td className="p-3 flex items-center justify-center gap-1.5">
+                            {b.status.startsWith('SUSPENDED:') ? (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/admin/bookings/${b.id}/resume`, {
+                                      method: 'PUT',
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (res.ok) fetchActiveBookings();
+                                    else alert("Failed to resume booking.");
+                                  } catch (e) {
+                                    console.error(e);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-black uppercase transition-colors"
+                              >
+                                Resume
+                              </button>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/admin/bookings/${b.id}/suspend`, {
+                                      method: 'PUT',
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (res.ok) fetchActiveBookings();
+                                    else alert("Failed to suspend booking.");
+                                  } catch (e) {
+                                    console.error(e);
+                                  }
+                                }}
+                                className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-black uppercase transition-colors"
+                              >
+                                Suspend
+                              </button>
+                            )}
+                            <button
+                              onClick={async () => {
+                                if (!confirm("Are you sure you want to cancel this booking?")) return;
+                                try {
+                                  const res = await fetch(`${API_BASE}/api/admin/bookings/${b.id}/cancel`, {
+                                    method: 'PUT',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                  });
+                                  if (res.ok) fetchActiveBookings();
+                                  else alert("Failed to cancel booking.");
+                                } catch (e) {
+                                  console.error(e);
+                                }
+                              }}
+                              className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[9px] font-black uppercase transition-colors"
+                            >
+                              Cancel
                             </button>
                           </td>
                         </tr>

@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 import cloudinary
 import cloudinary.uploader
 
@@ -14,14 +14,15 @@ from app.config import settings
 router = APIRouter()
 
 # -----------------------------
-# Temporary writable directory (Render-safe)
+# Static directory path (relative to project root)
 # -----------------------------
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "homesphere_uploads"
+UPLOAD_DIR = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / "static" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.post("/")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     folder: Optional[str] = Form(None),
     old_public_id: Optional[str] = Form(None),
@@ -75,8 +76,7 @@ async def upload_file(
         with open(destination, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # In production local temporary storage cannot serve files, but we return a mockup url for test/development
-        temp_url = f"https://api.homesphere.ai/static/temp/{filename}"
+        temp_url = f"{str(request.base_url)}static/uploads/{filename}"
 
         return {
             "success": True,

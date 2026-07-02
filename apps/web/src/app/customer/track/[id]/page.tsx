@@ -134,11 +134,8 @@ export default function TrackBooking() {
     loadBookingData();
     const interval = setInterval(loadBookingData, 4000);
 
-    // WebSocket connection
-    const defaultWsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${API_BASE.replace(/^https?:\/\//, '')}/api/ws/${bookingId}`;
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL 
-      ? `${process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, '')}/api/ws/${bookingId}`
-      : defaultWsUrl;
+    // WebSocket connection with production fallback
+    const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + bookingId;
     console.log("Customer WebSocket connecting:", wsUrl);
     const socket = new WebSocket(wsUrl);
 
@@ -146,7 +143,7 @@ export default function TrackBooking() {
       try {
         const msg = JSON.parse(event.data);
         console.log("Customer received event:", msg);
-        if (msg.booking_id === bookingId) {
+        if (msg.booking_id === bookingId || msg.booking_id === String(bookingId)) {
           loadBookingData();
         }
       } catch (err) {
@@ -156,7 +153,6 @@ export default function TrackBooking() {
 
     return () => {
       socket.close();
-      clearInterval(interval);
     };
   }, [token, bookingId, API_BASE]);
 
@@ -220,58 +216,22 @@ export default function TrackBooking() {
       setTechIndex((prev) => {
         const next = prev + 1;
         if (next >= routePoints.length - 1) {
-          // Notify backend technician arrived
-          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ 
-              status: 'ARRIVED', 
-              techLat: destCoords[0], 
-              techLng: destCoords[1], 
-              etaMinutes: 0 
-            })
-          }).then(() => {
-            setCurrentStatus('ARRIVED');
-            setEta(0);
-          }).catch(console.error);
-
           clearInterval(interval);
           return routePoints.length - 1;
         }
 
         const remainingPct = (routePoints.length - 1 - next) / (routePoints.length - 1);
-        const nextEta = Math.max(1, Math.round(remainingPct * 8));
+        const nextEta = Math.max(1, Math.round(remainingPct * 15)); // ETA 15 seconds to 0 seconds
         setEta(nextEta);
-
-        // Sync coordinates back to API periodically
-        if (next % 3 === 0) {
-          const pt = routePoints[next];
-          fetch(`${API_BASE}/api/bookings/${bookingId}/status`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ 
-              status: 'ON_THE_WAY', 
-              techLat: pt[0], 
-              techLng: pt[1], 
-              etaMinutes: nextEta 
-            })
-          }).catch(console.error);
-        }
 
         return next;
       });
-    }, 500);
+    }, 1000); // 1 second intervals for exactly 15 seconds
 
     return () => clearInterval(interval);
-  }, [routePoints, currentStatus, bookingId, token]);
+  }, [routePoints, currentStatus]);
 
-  const arrivedOrLater = ['ARRIVED', 'OTP_VERIFIED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'COMPLETED'].includes(currentStatus);
+  const arrivedOrLater = ['ARRIVED', 'OTP_VERIFIED', 'IN_PROGRESS', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'COMPLETED'].includes(currentStatus);
   const activeTechCoords = (currentStatus === 'ON_THE_WAY' && routePoints[techIndex])
     ? routePoints[techIndex]
     : arrivedOrLater

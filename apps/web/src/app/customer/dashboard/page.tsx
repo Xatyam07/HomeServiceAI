@@ -243,8 +243,28 @@ function DashboardContent() {
 
   useEffect(() => {
     loadCustomerBookings();
-    const interval = setInterval(loadCustomerBookings, 8000);
-    return () => clearInterval(interval);
+
+    if (user && token) {
+      const wsUrl = (process.env.NEXT_PUBLIC_WS_URL || 'wss://homeserviceai-1.onrender.com').replace(/\/$/, '') + '/api/ws/' + user.id;
+      console.log("Customer Dashboard WebSocket connecting:", wsUrl);
+      const socket = new WebSocket(wsUrl);
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          console.log("Customer Dashboard received event:", msg);
+          if (msg.customer_id === user.id || msg.event === "booking_updated" || msg.event === "booking_created" || msg.event === "payment_completed") {
+            loadCustomerBookings();
+          }
+        } catch (err) {
+          console.error("Error parsing customer dashboard WebSocket message:", err);
+        }
+      };
+
+      return () => {
+        socket.close();
+      };
+    }
   }, [token, user]);
 
   useEffect(() => {
