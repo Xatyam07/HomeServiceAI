@@ -240,7 +240,7 @@ function ProviderDashboardContent() {
   // Real GPS watch loop for real professionals
   useEffect(() => {
     const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
-    if (!activeWayJob || user?.email?.toLowerCase().includes("homesphere")) return;
+    if (!activeWayJob || activeWayJob.is_dummy_routed || user?.email?.toLowerCase().includes("homesphere")) return;
 
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(

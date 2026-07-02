@@ -108,6 +108,7 @@ class BookingResponse(BaseModel):
     customer_email: Optional[str] = None
     customer_phone: Optional[str] = None
     has_review: bool = False
+    is_dummy_routed: Optional[bool] = False
     created_at: datetime
 
     class Config:

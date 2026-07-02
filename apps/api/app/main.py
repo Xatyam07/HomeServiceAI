@@ -30,6 +30,7 @@ def run_database_optimizations():
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_provider_profiles_city_category ON provider_profiles(city, category)"))
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_payment_records_status ON payment_records(status)"))
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status)"))
+        db.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS is_dummy_routed BOOLEAN DEFAULT FALSE"))
         db.commit()
         print("Indexes validated/created successfully.")
 

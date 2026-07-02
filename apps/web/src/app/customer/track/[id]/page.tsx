@@ -32,7 +32,8 @@ export default function TrackBooking() {
   const [bookingDetails, setBookingDetails] = useState<any>(null);
 
   const isOriginalPro = !!(bookingDetails?.provider?.email && 
-    bookingDetails.provider.email.toLowerCase() === 'xatyammishra07@gmail.com');
+    bookingDetails.provider.email.toLowerCase() === 'xatyammishra07@gmail.com' &&
+    !bookingDetails.is_dummy_routed);
 
   const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3; // metres

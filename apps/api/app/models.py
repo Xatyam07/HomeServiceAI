@@ -112,6 +112,7 @@ class Booking(Base):
     otp_verified_at = Column(DateTime, nullable=True)
     arrived_at = Column(DateTime, nullable=True)
     rejected_providers = Column(String, default="[]") # JSON list of provider IDs who rejected
+    is_dummy_routed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=get_ist_time)
     updated_at = Column(DateTime, default=get_ist_time, onupdate=get_ist_time)
 

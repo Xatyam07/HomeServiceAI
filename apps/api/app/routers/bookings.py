@@ -161,11 +161,23 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(customer)
 
-    try:
+        # Check if the provider is a dummy professional
+        target_provider_id = dto.providerId
+        is_dummy = True
+        satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+        
+        if dto.providerId:
+            prov_user = db.query(User).filter(User.id == dto.providerId).first()
+            if prov_user and prov_user.email.lower() == "xatyammishra07@gmail.com":
+                is_dummy = False
+                
+        if is_dummy and satyam_user:
+            target_provider_id = satyam_user.id
+
         # Initialize model
         booking = Booking(
             customer_id=dto.customerId,
-            provider_id=dto.providerId,
+            provider_id=target_provider_id,
             service_type=dto.serviceType,
             description=dto.description,
             address=dto.address,
@@ -178,12 +190,27 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
             longitude=dto.longitude,
             status="PENDING_PROVIDER",
             rejected_providers="[]",
-            otp=str(random.randint(1000, 9999)) # Pre-generate 4 digit OTP code
+            otp=str(random.randint(1000, 9999)), # Pre-generate 4 digit OTP code
+            is_dummy_routed=is_dummy
         )
 
         db.add(booking)
         db.flush() # Flush to generate primary key ID
         
+        if is_dummy and satyam_user:
+            from app.models import ProviderProfile
+            profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
+            if profile:
+                profile.category = booking.service_type
+                city = "Kanpur"
+                from app.seed import CITIES_COORDINATES
+                for c in CITIES_COORDINATES:
+                    if c.lower() in booking.address.lower():
+                        city = c
+                        break
+                profile.city = city
+                profile.is_available = True
+            
         # If no provider specified, invoke auto-routing
         if not booking.provider_id:
             find_and_assign_provider(booking, db)
