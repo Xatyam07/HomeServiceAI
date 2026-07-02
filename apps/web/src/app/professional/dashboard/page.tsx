@@ -187,6 +187,11 @@ function ProviderDashboardContent() {
 
   const socketRef = useRef<WebSocket | null>(null);
 
+  const dbJobsRef = useRef(dbJobs);
+  useEffect(() => {
+    dbJobsRef.current = dbJobs;
+  }, [dbJobs]);
+
   useEffect(() => {
     if (routePoints.length === 0 || !hasOnTheWay) return;
     
@@ -196,7 +201,7 @@ function ProviderDashboardContent() {
         const next = prev + 1;
         
         // Broadcast location updates
-        const activeWayJob = dbJobs.find(j => j.status === 'ON_THE_WAY');
+        const activeWayJob = dbJobsRef.current.find(j => j.status === 'ON_THE_WAY');
         const pt = routePoints[next] || routePoints[routePoints.length - 1];
         if (activeWayJob && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
           socketRef.current.send(JSON.stringify({
@@ -216,7 +221,7 @@ function ProviderDashboardContent() {
       });
     }, 1000); // 1 second intervals for 15 seconds
     return () => clearInterval(interval);
-  }, [hasOnTheWay, routePoints, dbJobs]);
+  }, [hasOnTheWay, routePoints]);
 
   const [etaSeconds, setEtaSeconds] = useState(15);
 
