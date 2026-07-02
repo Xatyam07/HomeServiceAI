@@ -361,10 +361,13 @@ function DashboardContent() {
             const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
             if (response.ok) {
               const data = await response.json();
-              setAddress(data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+              setAddress(data.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+            } else {
+              setAddress(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
             }
           } catch (err) {
             console.error("Reverse geocoding failed:", err);
+            setAddress(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
           }
         },
         (error) => {
@@ -448,7 +451,7 @@ function DashboardContent() {
   const [isChatTyping, setIsChatTyping] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([
-    { sender: 'ai', text: "Hello! I am your HomeSphere AI Assistant. How can I help you today? (e.g. My AC isn't cooling, tap is leaking...)" }
+    { sender: 'ai', text: "Hello! My name is Eva. How can I help you today? (e.g. My AC isn't cooling, tap is leaking...)" }
   ]);
   const [suggestedReplies, setSuggestedReplies] = useState<Array<{ label: string, cmd: string }>>([
     { label: "🚰 Sink Leak", cmd: "Kitchen sink is leaking under the wooden cabinet" },
@@ -1868,10 +1871,10 @@ function DashboardContent() {
             </div>
 
             <div className="lg:col-span-4 p-6 rounded-2xl glass border border-white/5 flex flex-col gap-4">
-              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">AI Voice Assistant Guide</h3>
+              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Eva AI Voice Assistant Guide</h3>
               <div className="p-4 bg-indigo-950/20 border border-indigo-900/30 rounded-xl text-xs leading-relaxed text-slate-300">
                 <span className="font-bold text-indigo-400 block mb-1">Hands-free bookings</span>
-                You can activate the voice assistant by tapping the mic icon inside the AI assistant chat floating bubble. Use prompts like "book me a plumber for tomorrow" to schedule services via voice.
+                You can activate the voice assistant by tapping the mic icon inside the Eva AI assistant chat floating bubble. Use prompts like "book me a plumber for tomorrow" to schedule services via voice.
               </div>
             </div>
           </div>
@@ -1895,7 +1898,7 @@ function DashboardContent() {
                     <Sparkles size={16} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-xs text-white">HomeSphere Copilot AI</h4>
+                    <h4 className="font-bold text-xs text-white">Eva</h4>
                     <span className="text-[9px] text-emerald-400 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       Active • Neural Memory Linked
