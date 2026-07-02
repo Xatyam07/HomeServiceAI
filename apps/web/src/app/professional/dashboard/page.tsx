@@ -119,7 +119,7 @@ function ProviderDashboardContent() {
   
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
-  const [activeTab, setActiveTab] = useState<'home' | 'jobs' | 'live' | 'completed' | 'rejected' | 'history' | 'payments' | 'analytics'>('home');
+  const [activeTab, setActiveTab] = useState<'live' | 'pending' | 'accepted' | 'inprogress' | 'completed' | 'rejected' | 'history'>('pending');
   const [jobsSubTab, setJobsSubTab] = useState<'NEW' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'OTP_PENDING' | 'SERVICE_RUNNING' | 'PAYMENT_PENDING' | 'COMPLETED' | 'CANCELLED'>('NEW');
   
   // Custom Filters & Search States for Professional Dashboard
@@ -319,16 +319,23 @@ function ProviderDashboardContent() {
           const msg = JSON.parse(event.data);
           console.log("Professional received event:", msg);
           
-          const isAssignedToThisUser = msg.provider_id === user.id || 
-            (user.email?.toLowerCase() === 'xatyammishra07@gmail.com' && msg.provider_email && msg.provider_email.includes('homesphere'));
+          const isEligible = msg.event === "booking_popup" && (
+            (msg.provider_id === user.id) ||
+            (
+              !msg.provider_id &&
+              user.profile &&
+              user.profile.city?.toLowerCase() === msg.city?.toLowerCase() &&
+              user.profile.category?.toLowerCase() === msg.service_type?.toLowerCase()
+            )
+          );
             
-          if (msg.event === "booking_popup" && isAssignedToThisUser) {
+          if (isEligible) {
             playNotificationSound();
             setIncomingJob({
               id: msg.booking_id,
               customer: msg.customer_name || "Valued Customer",
               customerPhoto: "",
-              city: "Hyderabad",
+              city: msg.city || "Hyderabad",
               address: msg.address || "Hyderabad Center",
               service: msg.service_type,
               description: msg.description || "No description provided.",
@@ -336,10 +343,14 @@ function ProviderDashboardContent() {
               eta: "5 mins travel",
               urgency: "HIGH",
               estimatedFee: `₹${msg.total_cost}`,
-              paymentMethod: "Wallet",
+              paymentMethod: msg.payment_method || "Wallet",
               isRealBooking: true
             });
             setCountdown(30);
+          }
+          
+          if (msg.event === "booking_accepted" && msg.provider_id !== user.id) {
+            setIncomingJob(prev => (prev && prev.id === msg.booking_id) ? null : prev);
           }
           
           if (msg.event === "booking_created" || msg.event === "booking_popup" || msg.event === "booking_accepted" || msg.event === "booking_rejected" || msg.event === "booking_updated" || msg.event === "payment_completed" || msg.event === "otp_verified" || msg.event === "service_completed") {
@@ -631,6 +642,179 @@ function ProviderDashboardContent() {
     });
   };
 
+  const renderJobCard = (job: any) => {
+    const arrivedOrLater = ['ARRIVED', 'OTP_VERIFIED', 'IN_PROGRESS', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'COMPLETED'].includes(job.status);
+    const activeDest: [number, number] = [job.latitude || 26.4173, job.longitude || 80.3341];
+    const activeStart: [number, number] = [activeDest[0] + 0.008, activeDest[1] - 0.012];
+    const activeTechCoords = (job.status === 'ON_THE_WAY' && routePoints[techIndex])
+      ? routePoints[techIndex]
+      : arrivedOrLater
+        ? activeDest
+        : [job.tech_latitude || activeStart[0], job.tech_longitude || activeStart[1]] as [number, number];
+
+    return (
+      <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col gap-5 text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="flex gap-4 items-start text-left">
+            <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mt-1">
+              <Wrench size={18} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
+                <span className="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                  {job.status}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500">{job.address}</span>
+              <span className="text-[10px] text-slate-450 leading-relaxed mt-1">Desc: {job.description || 'No description provided.'}</span>
+              <span className="text-[10px] text-slate-400">Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
+              <div className="mt-1 flex items-center gap-3">
+                <span className="text-xs font-bold text-emerald-400">Rate: ₹{job.total_cost}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-stretch sm:items-end justify-end gap-3 min-w-[200px]">
+            {job.status === 'PENDING_PROVIDER' && (
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API_BASE}/api/bookings/${job.id}/accept`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      });
+                      if (res.ok) {
+                        await updateJobStatus(job.id, 'ON_THE_WAY');
+                        loadProfessionalJobs();
+                      }
+                    } catch(e) { console.error(e); }
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
+                >
+                  Accept Booking
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API_BASE}/api/bookings/${job.id}/reject`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      });
+                      if (res.ok) loadProfessionalJobs();
+                    } catch(e) { console.error(e); }
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all"
+                >
+                  Reject Booking
+                </button>
+              </div>
+            )}
+
+            {job.status === 'PROVIDER_ACCEPTED' && (
+              <button
+                onClick={() => updateJobStatus(job.id, 'ON_THE_WAY')}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all"
+              >
+                Start Travel (On The Way)
+              </button>
+            )}
+
+            {job.status === 'ON_THE_WAY' && (
+              <button
+                onClick={() => {
+                  const customerLat = job.latitude || 26.4173;
+                  const customerLng = job.longitude || 80.3341;
+                  const dist = getDistanceInMeters(activeTechCoords[0], activeTechCoords[1], customerLat, customerLng);
+                  if (dist > 10) {
+                    alert(`Cannot mark arrived. You are still ${dist.toFixed(1)} meters away from the customer. You must be within 10 meters (Current distance: ${dist.toFixed(1)}m).`);
+                    return;
+                  }
+                  updateJobStatus(job.id, 'ARRIVED');
+                }}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
+              >
+                Mark Arrived
+              </button>
+            )}
+
+            {job.status === 'ARRIVED' && (
+              <div className="flex flex-col gap-2">
+                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-left">Customer Verification OTP</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    placeholder="4-digit OTP"
+                    value={otpInputs[job.id] || ''}
+                    onChange={(e) => setOtpInputs(prev => ({ ...prev, [job.id]: e.target.value }))}
+                    className="w-28 px-2 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 text-center font-mono font-bold"
+                  />
+                  <button
+                    onClick={() => handleOtpVerify(job.id)}
+                    className="px-3 py-1.5 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    Verify OTP
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {job.status === 'SERVICE_STARTED' && (
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/api/bookings/${job.id}/confirm-completion`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) loadProfessionalJobs();
+                  } catch(e) { console.error(e); }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
+              >
+                Service Completed
+              </button>
+            )}
+
+            {(job.status === 'SERVICE_COMPLETED' || job.status === 'PAYMENT_PENDING') && (
+              <span className="text-[10px] text-slate-500 italic">Await Payment (Pending Customer Payout)...</span>
+            )}
+
+            {(job.status === 'PAYMENT_COMPLETED' || job.status === 'COMPLETED' || job.status === 'CLOSED') && (
+              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                <Check size={12} />
+                <span>Booking Complete Successfully</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {job.status === 'ON_THE_WAY' && (
+          <div className="mt-3 flex flex-col gap-2 relative">
+            <div className="w-full h-[220px] rounded-xl overflow-hidden border border-slate-900 relative">
+              <MapComponent
+                center={activeDest}
+                customerMarker={activeDest}
+                techMarker={activeTechCoords}
+                routeCoordinates={routePoints}
+                theme="dark"
+              />
+              <div className="absolute top-2 right-2 px-2.5 py-1 rounded bg-indigo-950/90 border border-indigo-900/40 text-[10px] text-indigo-400 font-bold z-[400] animate-pulse">
+                ETA: {etaSeconds}s
+              </div>
+              <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-slate-950/80 border border-slate-800 text-[8px] text-slate-400 z-[400] flex flex-col text-left">
+                <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
+                <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col grid-bg text-left">
       {/* Header */}
@@ -680,14 +864,13 @@ function ProviderDashboardContent() {
       {/* Tab Navigation */}
       <div className="max-w-7xl mx-auto px-6 mt-6 flex flex-wrap gap-2 md:gap-4 border-b border-slate-900 pb-2">
         {[
-          { id: 'home', label: 'Home Feed' },
-          { id: 'jobs', label: 'Assigned Jobs' },
           { id: 'live', label: 'Live Bookings' },
+          { id: 'pending', label: 'Pending Requests' },
+          { id: 'accepted', label: 'Accepted' },
+          { id: 'inprogress', label: 'In Progress' },
           { id: 'completed', label: 'Completed' },
           { id: 'rejected', label: 'Rejected' },
-          { id: 'history', label: 'History' },
-          { id: 'payments', label: 'Payments' },
-          { id: 'analytics', label: 'Analytics' }
+          { id: 'history', label: 'History' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -706,540 +889,97 @@ function ProviderDashboardContent() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1">
 
-
-        {activeTab === 'home' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Left Side: Stats & Earnings (7 cols) */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
-              
-              {/* Dashboard Stats */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Month Earnings</span>
-                  <span className="text-xl font-bold text-emerald-400">₹{walletBalance > 0 ? (24800 + (4850 - walletBalance)) : 29650}</span>
-                  <span className="text-[9px] text-emerald-500 flex items-center gap-0.5">
-                    <TrendingUp size={10} />
-                    <span>+12% vs last month</span>
-                  </span>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Acceptance Rate</span>
-                  <span className="text-xl font-bold text-slate-200">97.8%</span>
-                  <span className="text-[9px] text-indigo-400 font-medium">Top Tier Rating</span>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800/60 flex flex-col gap-1.5">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Customer Rating</span>
-                  <span className="text-xl font-bold text-slate-200 flex items-center gap-1">
-                    <span>4.92</span>
-                    <Star size={16} className="fill-yellow-400 text-yellow-400" />
-                  </span>
-                  <span className="text-[9px] text-slate-500">Based on 142 reviews</span>
-                </div>
-              </div>
-
-              {/* Earnings Custom Graph */}
-              <div className="p-6 rounded-2xl glass border border-white/5">
-                <div className="flex justify-between items-center pb-4 border-b border-slate-900 mb-6">
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-300 uppercase tracking-wider">Weekly Revenue Analytics</h3>
-                    <span className="text-[10px] text-slate-500">Interactive revenue payouts per day</span>
-                  </div>
-                  <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-1 rounded-lg">
-                    Last 7 Days
-                  </span>
-                </div>
-
-                <div className="h-48 w-full flex items-end justify-between gap-2.5 pt-4">
-                  {earningsData.map((d, index) => {
-                    const maxAmount = 2200;
-                    const percent = d.amount > 0 ? (d.amount / maxAmount) * 100 : 0;
-                    return (
-                      <div key={index} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                        <span className="text-[10px] text-slate-400 font-bold font-mono">
-                          {d.amount > 0 ? `₹${d.amount}` : '-'}
-                        </span>
-                        <div className="w-full bg-slate-900 rounded-t-lg overflow-hidden relative" style={{ height: `${percent}%` }}>
-                          <div className="absolute inset-0 bg-gradient-to-t from-emerald-600 to-cyan-500 hover:opacity-80 transition-opacity rounded-t-lg" />
-                        </div>
-                        <span className="text-xs text-slate-500 font-semibold">{d.day}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-            </div>
-
-            {/* Right Side: Wallet & Navigation (5 cols) */}
-            <div className="lg:col-span-5 flex flex-col gap-6">
-              
-              {/* Payout Wallet */}
-              <div className="p-5 rounded-2xl glass border border-white/5 flex flex-col gap-4">
-                <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">My Wallet Payouts</h3>
-                
-                <div className="p-4 rounded-xl bg-black/20 border border-slate-900 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">Available Balance</span>
-                    <span className="text-2xl font-bold text-white mt-1 block">₹{walletBalance}</span>
-                  </div>
-                  <button
-                    onClick={triggerPayout}
-                    disabled={walletBalance === 0 || payoutStatus !== 'idle'}
-                    className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
-                  >
-                    {payoutStatus === 'processing' && 'Transferring...'}
-                    {payoutStatus === 'done' && 'Transferred!'}
-                    {payoutStatus === 'idle' && 'Instant Cashout'}
-                  </button>
-                </div>
-
-                <div className="flex justify-between items-center text-[10px] text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck size={12} className="text-emerald-400" />
-                    <span>Instant Payouts enabled via UPI</span>
-                  </span>
-                  <button className="hover:underline flex items-center gap-0.5">
-                    <Download size={10} />
-                    <span>Tax Reports (Form 16A)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Verification Badge */}
-              <div className="p-5 rounded-2xl bg-gradient-to-tr from-emerald-950/20 to-cyan-950/20 border border-emerald-900/30 flex gap-4 text-left">
-                <Award size={36} className="text-emerald-400 shrink-0" />
-                <div className="flex flex-col gap-1.5">
-                  <h4 className="font-bold text-sm text-slate-200">KYC Status: Verified Gold</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    You have passed all background verification checks, document audits, and have maintained a 98% service reliability rate over the last 90 days.
-                  </p>
-                </div>
-              </div>
-
-              {/* Testing Mode Category Switcher */}
-              {user?.email === "xatyammishra07@gmail.com" && (
-                <div className="p-5 rounded-2xl bg-gradient-to-tr from-indigo-950/25 to-purple-950/25 border border-indigo-900/40 flex flex-col gap-4 text-left shadow-lg relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full filter blur-xl pointer-events-none" />
-                  
-                  <div className="flex items-center gap-2 text-indigo-400">
-                    <Sparkles size={16} className="animate-pulse" />
-                    <span className="font-extrabold text-[10px] tracking-wider uppercase">Testing Mode: Multi-Skill Pro</span>
-                  </div>
-                  
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    As the seeded test professional, you can dynamically switch between all 30 professions to validate different marketplace matching workflows.
-                  </p>
-
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Switch Active Profession</label>
-                    <select
-                      disabled={switching}
-                      value={selectedTestingCategory}
-                      onChange={(e) => handleSwitchTestingCategory(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-lg backdrop-blur-md transition-all font-semibold"
-                    >
-                      {[
-                        "Electrician", "Plumber", "Carpenter", "Painter", "AC Repair", "RO Repair", "Refrigerator Repair", 
-                        "Washing Machine Repair", "TV Repair", "Laptop Repair", "Mobile Repair", "CCTV Installation", 
-                        "Pest Control", "Deep Cleaning", "Sofa Cleaning", "Bathroom Cleaning", "Kitchen Cleaning", 
-                        "Home Painting", "Interior Designer", "Appliance Installation", "Packers & Movers", "Home Tutor", 
-                        "Fitness Trainer", "Yoga Instructor", "Beautician", "Makeup Artist", "Pet Care", "Elder Care", 
-                        "Babysitter", "Driver on Demand"
-                      ].map(cat => (
-                        <option key={cat} value={cat} className="bg-slate-950 text-slate-200">{cat}</option>
-                      ))}
-                    </select>
-                    {switching && (
-                      <span className="text-[10px] text-indigo-400 animate-pulse mt-1">Switching roles in SQL DB...</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        )}
-
-        {/* Assigned Jobs tab */}
-        {activeTab === 'jobs' && (
-          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-900">
-              <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400">Assigned Jobs & Real-Time Tracking</h3>
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{dbJobs.length} active allocations</span>
-            </div>
-
-            {/* Sub-Tabs Navigation */}
-            <div className="flex gap-2 flex-wrap mb-4 border-b border-slate-900 pb-3">
-              {[
-                { id: 'NEW', label: 'New Requests' },
-                { id: 'ACCEPTED', label: 'Accepted' },
-                { id: 'ON_THE_WAY', label: 'On The Way' },
-                { id: 'ARRIVED', label: 'Arrived' },
-                { id: 'OTP_PENDING', label: 'OTP Pending' },
-                { id: 'SERVICE_RUNNING', label: 'Service Running' },
-                { id: 'PAYMENT_PENDING', label: 'Payment Pending' },
-                { id: 'COMPLETED', label: 'Completed' },
-                { id: 'CANCELLED', label: 'Cancelled' }
-              ].map((sub) => {
-                const count = getFilteredJobs(dbJobs).filter(j => {
-                  if (sub.id === 'NEW') return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(j.status);
-                  if (sub.id === 'ACCEPTED') return j.status === 'ACCEPTED';
-                  if (sub.id === 'ON_THE_WAY') return j.status === 'ON_THE_WAY';
-                  if (sub.id === 'ARRIVED') return j.status === 'ARRIVED';
-                  if (sub.id === 'OTP_PENDING') return j.status === 'ARRIVED';
-                  if (sub.id === 'SERVICE_RUNNING') return ['SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status);
-                  if (sub.id === 'PAYMENT_PENDING') return ['SERVICE_COMPLETED', 'PAYMENT_PENDING'].includes(j.status);
-                  if (sub.id === 'COMPLETED') return ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED'].includes(j.status);
-                  if (sub.id === 'CANCELLED') return ['CANCELLED', 'REJECTED'].includes(j.status);
-                  return false;
-                }).length;
-                
-                return (
-                  <button
-                    key={sub.id}
-                    onClick={() => setJobsSubTab(sub.id as any)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border transition-all ${
-                      jobsSubTab === sub.id
-                        ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {sub.label} ({count})
-                  </button>
-                );
-              })}
-            </div>
- 
-            <div className="flex flex-col gap-4">
-              {(() => {
-                const filteredJobs = getFilteredJobs(dbJobs).filter(job => {
-                  switch (jobsSubTab) {
-                    case 'NEW':
-                      return ['PENDING_PROVIDER_ACCEPTANCE', 'ASSIGNED', 'REQUESTED'].includes(job.status);
-                    case 'ACCEPTED':
-                      return job.status === 'ACCEPTED';
-                    case 'ON_THE_WAY':
-                      return job.status === 'ON_THE_WAY';
-                    case 'ARRIVED':
-                    case 'OTP_PENDING':
-                      return job.status === 'ARRIVED';
-                    case 'SERVICE_RUNNING':
-                      return ['SERVICE_STARTED', 'IN_PROGRESS'].includes(job.status);
-                    case 'PAYMENT_PENDING':
-                      return ['SERVICE_COMPLETED', 'PAYMENT_PENDING'].includes(job.status);
-                    case 'COMPLETED':
-                      return ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED'].includes(job.status);
-                    case 'CANCELLED':
-                      return ['CANCELLED', 'REJECTED'].includes(job.status);
-                    default:
-                      return true;
-                  }
-                });
-
-                if (filteredJobs.length === 0) {
-                  return (
-                    <div className="text-center py-12 text-slate-500 text-xs flex flex-col items-center gap-2">
-                      <Wrench size={24} className="opacity-40" />
-                      <span>No jobs found in this section.</span>
-                    </div>
-                  );
-                }
-
-                return filteredJobs.map((job) => (
-                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex gap-4 items-start text-left">
-                      <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mt-1">
-                        <Wrench size={18} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
-                        <span className="text-[10px] text-slate-500">{job.address}</span>
-                        <span className="text-[10px] text-slate-400 mt-1 leading-relaxed">Desc: {job.description || 'No description provided.'}</span>
-                        <div className="mt-2.5 flex items-center gap-3">
-                          <span className="text-xs font-bold text-emerald-400">Rate: ₹{job.total_cost}</span>
-                          <span className="text-[9px] bg-indigo-950/60 text-indigo-400 border border-indigo-900/30 px-2 py-0.5 rounded-full font-mono font-bold">
-                            {job.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-stretch sm:items-end justify-end gap-3 min-w-[200px]">
-                      {(job.status === 'PENDING_PROVIDER_ACCEPTANCE' || job.status === 'ASSIGNED' || job.status === 'REQUESTED') && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(`${API_BASE}/api/bookings/${job.id}/accept`, {
-                                  method: 'POST',
-                                  headers: { 'Authorization': `Bearer ${token}` }
-                                });
-                                if (res.ok) {
-                                  await updateJobStatus(job.id, 'ON_THE_WAY');
-                                  loadProfessionalJobs();
-                                }
-                              } catch(e) { console.error(e); }
-                            }}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
-                          >
-                            Accept Booking
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(`${API_BASE}/api/bookings/${job.id}/reject`, {
-                                  method: 'POST',
-                                  headers: { 'Authorization': `Bearer ${token}` }
-                                });
-                                if (res.ok) loadProfessionalJobs();
-                              } catch(e) { console.error(e); }
-                            }}
-                            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all"
-                          >
-                            Reject Booking
-                          </button>
-                        </div>
-                      )}
-
-                      {job.status === 'ACCEPTED' && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'ON_THE_WAY')}
-                          className="px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          Start Navigation
-                        </button>
-                      )}
-
-                      {job.status === 'ON_THE_WAY' && (
-                        <div className="flex flex-col gap-2 w-full mt-3">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-left">Live Transit GPS Map</span>
-                          <div className="w-full h-48 rounded-xl border border-slate-900 overflow-hidden relative">
-                            <MapComponent
-                              center={destCoords}
-                              customerMarker={destCoords}
-                              techMarker={activeTechCoords}
-                              routeCoordinates={routePoints}
-                              theme="dark"
-                            />
-                            <div className="absolute top-2 right-2 px-2.5 py-1 rounded bg-indigo-950/90 border border-indigo-900/40 text-[10px] text-indigo-400 font-bold z-[400] animate-pulse">
-                              ETA: {etaSeconds}s
-                            </div>
-                            <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-slate-950/80 border border-slate-800 text-[8px] text-slate-400 z-[400] flex flex-col text-left">
-                              <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
-                              <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
-                            </div>
-                               <button
-                            onClick={() => {
-                              const customerLat = job.latitude || 26.4173;
-                              const customerLng = job.longitude || 80.3341;
-                              const dist = getDistanceInMeters(activeTechCoords[0], activeTechCoords[1], customerLat, customerLng);
-                              if (dist > 10) {
-                                alert(`Cannot mark arrived. You are still ${dist.toFixed(1)} meters away from the customer. You must be within 10 meters (Current distance: ${dist.toFixed(1)}m).`);
-                                return;
-                              }
-                              updateJobStatus(job.id, 'ARRIVED');
-                            }}
-                            className="w-full mt-1.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
-                          >
-                            Mark Arrived
-                          </button>
-                        </div>
-                      )}
-
-                      {job.status === 'ARRIVED' && (
-                        <div className="flex flex-col gap-2">
-                           <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-left">Customer Verification OTP</label>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              maxLength={4}
-                              placeholder="4-digit OTP"
-                              value={otpInputs[job.id] || ''}
-                              onChange={(e) => setOtpInputs(prev => ({ ...prev, [job.id]: e.target.value }))}
-                              className="w-28 px-2 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 text-center font-mono font-bold"
-                            />
-                            <button
-                              onClick={() => handleOtpVerify(job.id)}
-                              className="px-3 py-1.5 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
-                            >
-                              Verify OTP
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {['SERVICE_STARTED', 'IN_PROGRESS'].includes(job.status) && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(`${API_BASE}/api/bookings/${job.id}/confirm-completion`, {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${token}` }
-                              });
-                              if (res.ok) loadProfessionalJobs();
-                            } catch(e) { console.error(e); }
-                          }}
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
-                        >
-                          Service Completed
-                        </button>
-                      )}
-
-                      {(job.status === 'SERVICE_COMPLETED' || job.status === 'PAYMENT_PENDING') && (
-                        <span className="text-[10px] text-slate-500 italic">Await Payment (Pending Customer Payout)...</span>
-                      )}
-
-                      {(job.status === 'PAYMENT_COMPLETED' || job.status === 'COMPLETED' || job.status === 'CLOSED') && (
-                        <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                          <Check size={12} />
-                          <span>Booking Complete Successfully</span>
-                        </span>
-                      )}
-                      )}
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-        )}
-
         {/* Live Bookings Tab */}
         {activeTab === 'live' && (
           <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
-              Live Bookings in Progress
+              Live Bookings
             </h3>
             <div className="flex flex-col gap-4">
               {(() => {
-                const liveJobs = getFilteredJobs(dbJobs).filter(j => 
-                  ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status)
-                );
-                if (liveJobs.length === 0) {
-                  return <span className="text-xs text-slate-500 italic">No live bookings in progress.</span>;
-                }
-                return liveJobs.map(job => (
-                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex gap-4 items-start">
-                      <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mt-1">
-                        <Zap size={18} className="animate-pulse" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
-                          <span className="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
-                            {job.status}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-500">{job.address}</span>
-                        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
-                          <span>Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
-                          <span>•</span>
-                          <span>Phone: <strong>{job.customer_phone || 'N/A'}</strong></span>
-                          <span>•</span>
-                          <span className="font-mono text-[9px] bg-slate-900/60 px-1.5 py-0.5 rounded text-slate-500">ID: {job.id.substring(0, 8)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-sm text-white mr-4">₹{job.total_cost}</span>
-                      <Link
-                        href={`/customer/track/${job.id}`}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all"
-                      >
-                        Track Progress
-                      </Link>
-                    </div>
-                  </div>
-                ));
+                const list = dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status));
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No live bookings in progress.</span>;
+                return list.map(renderJobCard);
               })()}
             </div>
           </div>
         )}
 
-        {/* Completed Bookings Tab */}
+        {/* Pending Requests Tab */}
+        {activeTab === 'pending' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Pending Requests
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const list = dbJobs.filter(j => j.status === 'PENDING_PROVIDER');
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No pending requests available.</span>;
+                return list.map(renderJobCard);
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Accepted Tab */}
+        {activeTab === 'accepted' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Accepted Bookings
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const list = dbJobs.filter(j => ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED'].includes(j.status));
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No accepted bookings.</span>;
+                return list.map(renderJobCard);
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* In Progress Tab */}
+        {activeTab === 'inprogress' && (
+          <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
+            <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
+              Service In Progress
+            </h3>
+            <div className="flex flex-col gap-4">
+              {(() => {
+                const list = dbJobs.filter(j => ['SERVICE_STARTED', 'IN_PROGRESS'].includes(j.status));
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No services in progress.</span>;
+                return list.map(renderJobCard);
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Completed Tab */}
         {activeTab === 'completed' && (
           <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
-              Completed Service History
+              Completed Bookings
             </h3>
             <div className="flex flex-col gap-4">
               {(() => {
-                const completedJobs = getFilteredJobs(dbJobs).filter(j => 
-                  ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED', 'SERVICE_COMPLETED'].includes(j.status)
-                );
-                if (completedJobs.length === 0) {
-                  return <span className="text-xs text-slate-500 italic">No completed bookings.</span>;
-                }
-                return completedJobs.map(job => (
-                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex gap-4 items-start">
-                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mt-1">
-                        <CheckCircle2 size={18} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-wider">
-                            COMPLETED
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-500">{job.address}</span>
-                        <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1">
-                          <span>Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
-                          <span>•</span>
-                          <span>Payment: <strong className="text-emerald-400">{job.payment_status}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-sm text-slate-300">₹{job.total_cost}</span>
-                    </div>
-                  </div>
-                ));
+                const list = dbJobs.filter(j => ['COMPLETED', 'PAYMENT_COMPLETED', 'CLOSED'].includes(j.status));
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No completed bookings.</span>;
+                return list.map(renderJobCard);
               })()}
             </div>
           </div>
         )}
 
-        {/* Rejected Bookings Tab */}
+        {/* Rejected Tab */}
         {activeTab === 'rejected' && (
           <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
-              Rejected / Cancelled Bookings
+              Rejected / Cancelled
             </h3>
             <div className="flex flex-col gap-4">
               {(() => {
-                const rejectedJobs = getFilteredJobs(dbJobs).filter(j => 
-                  ['REJECTED', 'CANCELLED'].includes(j.status)
-                );
-                if (rejectedJobs.length === 0) {
-                  return <span className="text-xs text-slate-500 italic">No rejected or cancelled bookings.</span>;
-                }
-                return rejectedJobs.map(job => (
-                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex gap-4 items-start">
-                      <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 mt-1">
-                        <AlertTriangle size={18} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
-                          <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[9px] font-bold uppercase tracking-wider">
-                            {job.status}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-500">{job.address}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-sm text-rose-400/80">₹{job.total_cost}</span>
-                    </div>
-                  </div>
-                ));
+                const list = dbJobs.filter(j => ['REJECTED', 'CANCELLED'].includes(j.status));
+                if (list.length === 0) return <span className="text-xs text-slate-500 italic">No rejected or cancelled bookings.</span>;
+                return list.map(renderJobCard);
               })()}
             </div>
           </div>
@@ -1249,37 +989,12 @@ function ProviderDashboardContent() {
         {activeTab === 'history' && (
           <div className="rounded-2xl glass p-6 border border-white/5 flex flex-col gap-4 text-left">
             <h3 className="font-bold text-sm tracking-wider uppercase text-slate-400 pb-2 border-b border-slate-900">
-              All Booking History (Searchable)
+              All Booking History
             </h3>
             <div className="flex flex-col gap-4">
               {(() => {
-                const historyJobs = getFilteredJobs(dbJobs);
-                if (historyJobs.length === 0) {
-                  return <span className="text-xs text-slate-500 italic">No bookings found in history matching filters.</span>;
-                }
-                return historyJobs.map(job => (
-                  <div key={job.id} className="p-5 rounded-xl bg-black/35 border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex gap-4 items-start">
-                      <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-800 text-slate-400 mt-1">
-                        <Clock size={18} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-200">{job.service_type}</span>
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold uppercase tracking-wider">
-                            {job.status}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-500">{job.address}</span>
-                        <span className="text-[10px] text-slate-400 mt-1">Customer: <strong>{job.customer_name || 'N/A'}</strong></span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-sm text-slate-300">₹{job.total_cost}</span>
-                    </div>
-                  </div>
-                ));
+                if (dbJobs.length === 0) return <span className="text-xs text-slate-500 italic">No booking history.</span>;
+                return dbJobs.map(renderJobCard);
               })()}
             </div>
           </div>

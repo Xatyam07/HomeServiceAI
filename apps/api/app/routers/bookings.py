@@ -136,9 +136,9 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     scored_candidates.sort(key=lambda x: x[1], reverse=True)
     
     # Assign the top scored provider
-    booking.provider_id = scored_candidates[0][0]
-    booking.status = "PENDING_PROVIDER_ACCEPTANCE"
-    return True
+    booking.provider_id = None
+    booking.status = "PENDING_PROVIDER"
+    return False
 
 @router.post("/", response_model=BookingResponse)
 async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
@@ -175,7 +175,7 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
             duration_min=dto.durationMin,
             latitude=dto.latitude,
             longitude=dto.longitude,
-            status="PENDING_PROVIDER_ACCEPTANCE",
+            status="PENDING_PROVIDER",
             rejected_providers="[]",
             otp=str(random.randint(1000, 9999)) # Pre-generate 4 digit OTP code
         )
@@ -211,6 +211,13 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         if p_user:
             p_email = p_user.email.lower()
 
+    city = "Kanpur"
+    from app.seed import CITIES_COORDINATES
+    for c in CITIES_COORDINATES:
+        if c.lower() in booking.address.lower():
+            city = c
+            break
+
     await manager.broadcast({
         "event": "booking_popup",
         "booking_id": str(booking.id),
@@ -223,7 +230,8 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         "address": booking.address,
         "total_cost": booking.total_cost,
         "latitude": booking.latitude,
-        "longitude": booking.longitude
+        "longitude": booking.longitude,
+        "city": city
     })
         
     return booking
@@ -408,7 +416,7 @@ async def accept_booking(
     if current_user.role == "PROVIDER":
         booking.provider_id = current_user.id
         
-    booking.status = "ACCEPTED"
+    booking.status = "PROVIDER_ACCEPTED"
     if not booking.otp:
         booking.otp = str(random.randint(1000, 9999)) # Generate 4-digit OTP
         

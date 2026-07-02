@@ -516,8 +516,8 @@ export default function TrackBooking() {
               <div>
                 <span className="text-[10px] text-slate-500 font-semibold block uppercase">Status</span>
                 <span className="text-xs font-bold text-cyan-400 mt-1 block">
-                  {currentStatus === 'PENDING_PROVIDER_ACCEPTANCE' && 'Searching...'}
-                  {currentStatus === 'ACCEPTED' && 'Assigned'}
+                  {['PENDING_PROVIDER', 'PENDING_PROVIDER_ACCEPTANCE'].includes(currentStatus) && 'Searching...'}
+                  {['PROVIDER_ACCEPTED', 'ACCEPTED'].includes(currentStatus) && 'Assigned'}
                   {currentStatus === 'ON_THE_WAY' && 'En Route'}
                   {currentStatus === 'ARRIVED' && 'Arrived'}
                   {currentStatus === 'OTP_VERIFIED' && 'OTP Verified'}
