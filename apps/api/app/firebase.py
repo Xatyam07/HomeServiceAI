@@ -15,35 +15,42 @@ class FirebaseService:
         return cls._instance
 
     def _initialize(self):
+        import base64
+        import json
+        
         # 1. Try initializing with individual parameters if provided
-        if settings.FIREBASE_PROJECT_ID and settings.FIREBASE_CLIENT_EMAIL and settings.FIREBASE_PRIVATE_KEY:
+        project_id = settings.FIREBASE_PROJECT_ID or os.getenv("FIREBASE_PROJECT_ID")
+        client_email = settings.FIREBASE_CLIENT_EMAIL or os.getenv("FIREBASE_CLIENT_EMAIL")
+        private_key_raw = settings.FIREBASE_PRIVATE_KEY or os.getenv("FIREBASE_PRIVATE_KEY")
+        
+        if project_id and client_email and private_key_raw:
             try:
                 print("Initializing Firebase Admin SDK using individual environment variables.")
-                private_key = settings.FIREBASE_PRIVATE_KEY.replace("\\n", "\n")
+                private_key = private_key_raw.replace("\\n", "\n")
                 cred_dict = {
                     "type": "service_account",
-                    "project_id": settings.FIREBASE_PROJECT_ID,
+                    "project_id": project_id,
                     "private_key": private_key,
-                    "client_email": settings.FIREBASE_CLIENT_EMAIL,
+                    "client_email": client_email,
                     "token_uri": "https://oauth2.googleapis.com/token",
                 }
                 cred = credentials.Certificate(cred_dict)
                 if not firebase_admin._apps:
                     firebase_admin.initialize_app(cred)
                 self.initialized = True
+                print("Firebase Admin SDK successfully initialized via individual variables.")
                 return
             except Exception as e:
-                print(f"Warning: Error initializing with Firebase environment variables: {e}. Attempting fallback...")
+                print(f"Warning: Error initializing with Firebase individual variables: {e}. Attempting other methods...")
 
-        # 2. Retrieve the credentials string or path from settings
-        firebase_env = settings.FIREBASE_SERVICE_ACCOUNT
-        
+        # 2. Retrieve credentials string/path
+        firebase_env = settings.FIREBASE_SERVICE_ACCOUNT or os.getenv("FIREBASE_SERVICE_ACCOUNT")
         if not firebase_env:
             print("Warning: FIREBASE_SERVICE_ACCOUNT and individual variables are empty. Firebase Admin SDK will not be initialized. Only mock tokens will work.")
             self.initialized = False
             return
 
-        # 3. Check if the setting points to a valid local file path
+        # 3. Check if it is a local file path
         if os.path.exists(firebase_env):
             try:
                 print(f"Initializing Firebase Admin SDK using credential file path: {firebase_env}")
@@ -51,21 +58,39 @@ class FirebaseService:
                 if not firebase_admin._apps:
                     firebase_admin.initialize_app(cred)
                 self.initialized = True
+                print("Firebase Admin SDK successfully initialized via file path.")
+                return
             except Exception as e:
-                print(f"Warning: Error loading Firebase credential file: {e}. Firebase authentication will not be initialized.")
-                self.initialized = False
-        else:
-            # 4. Otherwise treat it as raw JSON content
-            try:
-                print("Initializing Firebase Admin SDK using raw JSON string from environment.")
-                cred_dict = json.loads(firebase_env)
-                cred = credentials.Certificate(cred_dict)
-                if not firebase_admin._apps:
-                    firebase_admin.initialize_app(cred)
-                self.initialized = True
-            except Exception as e:
-                print(f"Warning: Error parsing raw Firebase JSON string: {e}. Firebase authentication will not be initialized.")
-                self.initialized = False
+                print(f"Warning: Error loading Firebase credential file: {e}. Attempting text fallbacks...")
+
+        # 4. Attempt to load as JSON directly
+        try:
+            print("Initializing Firebase Admin SDK using raw JSON string from environment.")
+            cred_dict = json.loads(firebase_env)
+            cred = credentials.Certificate(cred_dict)
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+            self.initialized = True
+            print("Firebase Admin SDK successfully initialized via raw JSON string.")
+            return
+        except Exception as e_json:
+            print(f"Warning: Failed to parse raw JSON: {e_json}. Trying Base64 decoding...")
+
+        # 5. Attempt to load as Base64 encoded JSON
+        try:
+            print("Attempting to Base64 decode FIREBASE_SERVICE_ACCOUNT...")
+            decoded_bytes = base64.b64decode(firebase_env.strip())
+            decoded_str = decoded_bytes.decode('utf-8')
+            cred_dict = json.loads(decoded_str)
+            cred = credentials.Certificate(cred_dict)
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
+            self.initialized = True
+            print("Firebase Admin SDK successfully initialized via Base64 decoded JSON.")
+            return
+        except Exception as e_b64:
+            print(f"Warning: Base64 decode and parse failed: {e_b64}. Firebase authentication will not be initialized, continuing startup.")
+            self.initialized = False
 
     def verify_token(self, token: str) -> dict:
         """Verifies the Firebase ID token and returns the decoded token payload."""

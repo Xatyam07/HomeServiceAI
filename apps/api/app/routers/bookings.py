@@ -161,6 +161,7 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(customer)
 
+    try:
         # Check if the provider is a dummy professional
         target_provider_id = dto.providerId
         is_dummy = True
