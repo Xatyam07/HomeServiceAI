@@ -1248,6 +1248,9 @@ function DashboardContent() {
                         })}
                         theme={theme}
                       />
+                    </div>
+                  </div>
+                )}
                                    {/* STEP 3: PAY & SCHEDULE */}
                 {activeStep === 3 && selectedPro && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs text-left items-start">
@@ -1486,9 +1489,6 @@ function DashboardContent() {
                         ]}
                         theme={theme}
                       />
-                    </div>
-                  </div>
-                )}
                     </div>
                   </div>
                 )}
