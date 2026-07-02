@@ -31,6 +31,35 @@ export default function TrackBooking() {
   const bookingId = params?.id;
   const [bookingDetails, setBookingDetails] = useState<any>(null);
 
+  const getInitials = (name?: string) => {
+    if (!name) return 'AP';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  };
+
+  const getStepTime = (stepKey: string) => {
+    if (!bookingDetails?.created_at) return '---';
+    const baseTime = new Date(bookingDetails.created_at).getTime();
+    
+    switch (stepKey) {
+      case 'ACCEPTED':
+        return formatToIST(bookingDetails.created_at);
+      case 'ON_THE_WAY':
+        return formatToIST(new Date(baseTime + 2 * 60 * 1000));
+      case 'ARRIVED':
+        return formatToIST(new Date(baseTime + 4 * 60 * 1000));
+      case 'IN_PROGRESS':
+        return ['SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(currentStatus)
+          ? formatToIST(new Date(baseTime + 5 * 60 * 1000))
+          : '---';
+      case 'COMPLETED':
+        return ['SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'].includes(currentStatus)
+          ? formatToIST(bookingDetails.updated_at)
+          : '---';
+      default:
+        return '---';
+    }
+  };
+
   const isOriginalPro = !!(bookingDetails?.provider?.email && 
     bookingDetails.provider.email.toLowerCase() === 'xatyammishra07@gmail.com' &&
     !bookingDetails.is_dummy_routed);
@@ -201,6 +230,17 @@ export default function TrackBooking() {
     { sender: 'tech', text: 'Hi! I am Ramesh Patel. I have accepted your request and I am gathering my plumbing toolkit. I will be heading your way in 2 minutes.' },
     { sender: 'tech', text: 'I am on my way now. Traffic looks normal.' }
   ]);
+
+  useEffect(() => {
+    if (bookingDetails?.provider_name) {
+      const name = bookingDetails.provider_name;
+      const category = bookingDetails.service_type || 'repair';
+      setChatMessages([
+        { sender: 'tech', text: `Hi! I am ${name}. I have accepted your request and I am gathering my ${category.toLowerCase()} toolkit. I will be heading your way in 2 minutes.` },
+        { sender: 'tech', text: 'I am on my way now. Traffic looks normal.' }
+      ]);
+    }
+  }, [bookingDetails?.provider_name]);
 
   // Invoice simulation
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -634,11 +674,11 @@ export default function TrackBooking() {
             <div className="flex flex-col gap-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-800">
               
               {[
-                { key: 'ACCEPTED', dbKeys: ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Booking Confirmed', desc: 'Ramesh Patel (Plumber) matched and accepted the job schedule.', time: '07:54 PM' },
-                { key: 'ON_THE_WAY', dbKeys: ['ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Departed', desc: 'Ramesh has left transit yard with toolkit, driving along Outer Ring Road.', time: '07:56 PM' },
-                { key: 'ARRIVED', dbKeys: ['ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: '07:58 PM' },
-                { key: 'IN_PROGRESS', dbKeys: ['SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Repair In Progress', desc: 'Replacing joint pipe gaskets and cleaning internal trap blocks.', time: '---' },
-                { key: 'COMPLETED', dbKeys: ['SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Job Finalized', desc: 'Repair verified resolved. GST invoice generated successfully.', time: '---' }
+                { key: 'ACCEPTED', dbKeys: ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Booking Confirmed', desc: bookingDetails?.provider_name ? `${bookingDetails.provider_name} (${bookingDetails.service_type || 'Professional'}) matched and accepted the job schedule.` : 'Searching for a professional...', time: getStepTime('ACCEPTED') },
+                { key: 'ON_THE_WAY', dbKeys: ['ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Departed', desc: bookingDetails?.provider_name ? `${bookingDetails.provider_name} has left transit yard with toolkit.` : 'Technician has left transit yard with toolkit.', time: getStepTime('ON_THE_WAY') },
+                { key: 'ARRIVED', dbKeys: ['ARRIVED', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Technician Arrived', desc: 'Provider at location. Verification OTP needed to commence repair.', time: getStepTime('ARRIVED') },
+                { key: 'IN_PROGRESS', dbKeys: ['SERVICE_STARTED', 'SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Repair In Progress', desc: 'Performing service diagnosis and commencing repair works.', time: getStepTime('IN_PROGRESS') },
+                { key: 'COMPLETED', dbKeys: ['SERVICE_COMPLETED', 'PAYMENT_COMPLETED', 'COMPLETED', 'CLOSED'], label: 'Job Finalized', desc: 'Repair verified resolved. GST invoice generated successfully.', time: getStepTime('COMPLETED') }
               ].map((step, idx) => {
                 const isFinished = step.dbKeys.includes(currentStatus);
                 const isCurrent = currentStatus === step.key || 
@@ -724,11 +764,15 @@ export default function TrackBooking() {
             <div className="flex items-center justify-between pb-3 border-b border-slate-900">
               <div className="flex gap-2.5 items-center">
                 <div className="w-10 h-10 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-sm">
-                  RP
+                  {getInitials(bookingDetails?.provider_name)}
                 </div>
                 <div className="flex flex-col">
-                  <h4 className="font-bold text-sm text-slate-200">Ramesh Patel</h4>
-                  <span className="text-[10px] text-slate-500">Verified Plumber • 11 yrs exp</span>
+                  <h4 className="font-bold text-sm text-slate-200">{bookingDetails?.provider_name || 'Assigning...'}</h4>
+                  <span className="text-[10px] text-slate-500">
+                    {bookingDetails?.provider_name 
+                      ? `Verified ${bookingDetails.service_type || 'Professional'} • ${bookingDetails.provider_experience || 5} yrs exp` 
+                      : 'Searching for candidates'}
+                  </span>
                 </div>
               </div>
 
@@ -741,9 +785,9 @@ export default function TrackBooking() {
             <div className="flex justify-between items-center text-xs">
               <div className="flex items-center gap-1 text-slate-400">
                 <Phone size={12} />
-                <span>+91 98450 12842</span>
+                <span>{bookingDetails?.provider_phone || '+91 99999 99999'}</span>
               </div>
-              <span className="text-slate-500">Hourly Rate: ₹400/hr</span>
+              <span className="text-slate-500">Hourly Rate: ₹{bookingDetails?.provider_rate || 350}/hr</span>
             </div>
           </div>
 
@@ -752,7 +796,7 @@ export default function TrackBooking() {
             <div className="flex justify-between items-center pb-2 border-b border-slate-900 mb-3">
               <div className="flex items-center gap-1.5">
                 <MessageSquare size={16} className="text-indigo-400" />
-                <span className="font-bold text-xs text-slate-300">Live Chat with Ramesh</span>
+                <span className="font-bold text-xs text-slate-300">Live Chat with {bookingDetails?.provider_name ? bookingDetails.provider_name.split(' ')[0] : 'Professional'}</span>
               </div>
               <span className="text-[9px] text-emerald-400 font-mono animate-pulse">● Socket Connected</span>
             </div>
@@ -777,7 +821,7 @@ export default function TrackBooking() {
             <div className="pt-2 border-t border-slate-900 flex items-center gap-2">
               <input
                 type="text"
-                placeholder="Message Ramesh..."
+                placeholder={`Message ${bookingDetails?.provider_name ? bookingDetails.provider_name.split(' ')[0] : 'Professional'}...`}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}

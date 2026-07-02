@@ -107,6 +107,13 @@ class BookingResponse(BaseModel):
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
     customer_phone: Optional[str] = None
+    provider_name: Optional[str] = None
+    provider_email: Optional[str] = None
+    provider_phone: Optional[str] = None
+    provider_photo: Optional[str] = None
+    provider_rating: Optional[float] = None
+    provider_experience: Optional[int] = None
+    provider_rate: Optional[float] = None
     has_review: bool = False
     is_dummy_routed: Optional[bool] = False
     created_at: datetime

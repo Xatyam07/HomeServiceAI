@@ -132,6 +132,34 @@ class Booking(Base):
     def has_review(self):
         return self.review is not None
 
+    @property
+    def provider_name(self):
+        return self.provider.name if self.provider else None
+
+    @property
+    def provider_email(self):
+        return self.provider.email if self.provider else None
+
+    @property
+    def provider_phone(self):
+        return self.provider.phone if self.provider else None
+
+    @property
+    def provider_photo(self):
+        return self.provider.profile_photo if self.provider else None
+
+    @property
+    def provider_rating(self):
+        return self.provider.profile.rating if (self.provider and self.provider.profile) else 4.8
+
+    @property
+    def provider_experience(self):
+        return self.provider.profile.experience_yrs if (self.provider and self.provider.profile) else 5
+
+    @property
+    def provider_rate(self):
+        return self.provider.profile.hourly_rate if (self.provider and self.provider.profile) else 350
+
     # Relationships
     customer = relationship("User", foreign_keys=[customer_id], back_populates="bookings_as_customer")
     provider = relationship("User", foreign_keys=[provider_id], back_populates="bookings_as_provider")
