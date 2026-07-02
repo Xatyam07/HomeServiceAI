@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { 
   MapPin, Clock, MessageSquare, Send, CheckCircle2, Phone, 
-  Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight, Star
+  Sparkles, ShieldCheck, Download, AlertTriangle, Play, ChevronRight, Star, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
@@ -86,13 +86,14 @@ export default function TrackBooking() {
   const [formattedDate, setFormattedDate] = useState<string>("");
 
   useEffect(() => {
+    if (isOriginalPro) return;
     if (currentStatus !== 'ON_THE_WAY') return;
     setEtaSeconds(15);
     const secInterval = setInterval(() => {
       setEtaSeconds(s => Math.max(0, s - 1));
     }, 1000);
     return () => clearInterval(secInterval);
-  }, [currentStatus]);
+  }, [currentStatus, isOriginalPro]);
 
   useEffect(() => {
     setFormattedDate(formatToISTFull(new Date()));
@@ -203,12 +204,45 @@ export default function TrackBooking() {
     return route;
   };
 
+  const isOriginalPro = !!(bookingDetails?.provider?.email && 
+    bookingDetails.provider.email.toLowerCase() !== 'xatyammishra07@gmail.com');
+
+  const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
   useEffect(() => {
     const pts = generateSimulatedRoute(startCoords, destCoords);
     setRoutePoints(pts);
   }, [bookingDetails?.latitude, bookingDetails?.longitude]);
 
+  // Real-time ETA watcher for original professionals
   useEffect(() => {
+    if (!isOriginalPro || !bookingDetails?.tech_latitude || !bookingDetails?.tech_longitude) return;
+    const lat1 = bookingDetails.tech_latitude;
+    const lon1 = bookingDetails.tech_longitude;
+    const lat2 = destCoords[0];
+    const lon2 = destCoords[1];
+    const dist = getDistanceInMeters(lat1, lon1, lat2, lon2);
+    const travelTimeSeconds = Math.round(dist / 8.3); // assume avg 30km/h
+    const travelTimeMinutes = Math.max(1, Math.round(travelTimeSeconds / 60));
+    setEta(travelTimeMinutes);
+    setEtaSeconds(travelTimeSeconds % 60);
+  }, [bookingDetails?.tech_latitude, bookingDetails?.tech_longitude, isOriginalPro, destCoords]);
+
+  useEffect(() => {
+    if (isOriginalPro) return;
     if (routePoints.length === 0 || currentStatus !== 'ON_THE_WAY') return;
     
     // Start from beginning when transit is active
@@ -231,16 +265,20 @@ export default function TrackBooking() {
     }, 1000); // 1 second intervals for exactly 15 seconds
 
     return () => clearInterval(interval);
-  }, [routePoints, currentStatus]);
+  }, [routePoints, currentStatus, isOriginalPro]);
 
   const arrivedOrLater = ['ARRIVED', 'OTP_VERIFIED', 'IN_PROGRESS', 'SERVICE_STARTED', 'SERVICE_COMPLETED', 'COMPLETED'].includes(currentStatus);
-  const activeTechCoords = (currentStatus === 'ON_THE_WAY' && routePoints[techIndex])
-    ? routePoints[techIndex]
-    : arrivedOrLater
-      ? destCoords
-      : (bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
+  const activeTechCoords = isOriginalPro
+    ? ((bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
         ? [bookingDetails.tech_latitude, bookingDetails.tech_longitude] as [number, number]
-        : (routePoints[techIndex] || startCoords);
+        : startCoords)
+    : ((currentStatus === 'ON_THE_WAY' && routePoints[techIndex])
+        ? routePoints[techIndex]
+        : arrivedOrLater
+          ? destCoords
+          : (bookingDetails?.tech_latitude && bookingDetails?.tech_longitude)
+            ? [bookingDetails.tech_latitude, bookingDetails.tech_longitude] as [number, number]
+            : (routePoints[techIndex] || startCoords));
 
   // Job progress simulator (when status is IN_PROGRESS)
   useEffect(() => {
@@ -553,7 +591,7 @@ export default function TrackBooking() {
                 <div className="flex justify-between items-center text-emerald-450">
                   <div className="flex items-center gap-1.5 font-extrabold text-xs tracking-wider uppercase">
                     <Sparkles size={14} className="text-emerald-450 animate-pulse" />
-                    <span>SERVICE COMPLETED & CLOSED</span>
+                    <span>BOOKING COMPLETE SUCCESSFULLY</span>
                   </div>
                   <span className="font-extrabold text-xs text-emerald-400">Paid</span>
                 </div>
@@ -849,11 +887,11 @@ export default function TrackBooking() {
                 <button
                   onClick={() => {
                     setReviewClosed(true);
-                    window.location.href = '/customer/dashboard';
                   }}
-                  className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors text-[10px] font-bold"
+                  className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                  title="Close review modal"
                 >
-                  Skip
+                  <X size={14} />
                 </button>
               </div>
 

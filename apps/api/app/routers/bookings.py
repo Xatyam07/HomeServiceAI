@@ -177,7 +177,7 @@ async def create_booking(dto: BookingCreate, db: Session = Depends(get_db)):
             longitude=dto.longitude,
             status="PENDING_PROVIDER_ACCEPTANCE",
             rejected_providers="[]",
-            otp=str(random.randint(100000, 999999)) # Pre-generate 6 digit OTP code
+            otp=str(random.randint(1000, 9999)) # Pre-generate 4 digit OTP code
         )
 
         db.add(booking)
@@ -299,16 +299,25 @@ async def get_bookings(
 
     bookings = []
     if role == "PROVIDER":
-        is_master_sim = user.email.lower() == "xatyammishra07@gmail.com"
-        if is_master_sim:
-            dummy_users_ids = db.query(User.id).filter(User.email.ilike("%@homesphere.%")).all()
-            dummy_ids_list = [d[0] for d in dummy_users_ids]
-            bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(
-                (Booking.provider_id == user_uuid) | 
-                (Booking.provider_id.in_(dummy_ids_list))
+        from app.models import ProviderProfile
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == user_uuid).first()
+        category = profile.category if profile else None
+        
+        if category:
+            bookings = db.query(Booking).options(
+                joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)
+            ).filter(
+                (Booking.provider_id == user_uuid) |
+                (
+                    (Booking.status == "PENDING_PROVIDER_ACCEPTANCE") &
+                    ((Booking.provider_id == None) | (Booking.provider_id == user_uuid)) &
+                    (Booking.service_type.ilike(category))
+                )
             ).order_by(Booking.created_at.desc()).all()
         else:
-            bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
+            bookings = db.query(Booking).options(
+                joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)
+            ).filter(Booking.provider_id == user_uuid).order_by(Booking.created_at.desc()).all()
     else:
         bookings = db.query(Booking).options(joinedload(Booking.review), joinedload(Booking.customer), joinedload(Booking.provider)).filter(Booking.customer_id == user_uuid).order_by(Booking.created_at.desc()).all()
 
@@ -401,7 +410,7 @@ async def accept_booking(
         
     booking.status = "ACCEPTED"
     if not booking.otp:
-        booking.otp = str(random.randint(100000, 999999)) # Generate 6-digit OTP
+        booking.otp = str(random.randint(1000, 9999)) # Generate 4-digit OTP
         
     db.commit()
     db.refresh(booking)
@@ -465,9 +474,13 @@ async def send_booking_otp(booking_id: UUID, db: Session = Depends(get_db)):
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found.")
     
-    otp = str(random.randint(100000, 999999))
-    booking.otp = otp
-    db.commit()
+    if not booking.otp:
+        otp = str(random.randint(1000, 9999))
+        booking.otp = otp
+        db.commit()
+    else:
+        otp = booking.otp
+        
     return {
         "status": "SUCCESS",
         "message": f"OTP verification code sent to customer.",
@@ -486,7 +499,7 @@ async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Se
     if booking.otp != payload.otp:
         raise HTTPException(status_code=400, detail="Incorrect verification OTP code. Please try again.")
         
-    booking.status = "IN_PROGRESS"
+    booking.status = "SERVICE_STARTED"
     booking.otp_verified_at = get_ist_time()
     db.commit()
     db.refresh(booking)
@@ -494,6 +507,13 @@ async def verify_booking_otp(booking_id: UUID, payload: OtpVerifyRequest, db: Se
     # Broadcast OTP verified
     await manager.broadcast({
         "event": "otp_verified",
+        "booking_id": str(booking.id),
+        "status": booking.status
+    })
+    
+    # Also broadcast service started event
+    await manager.broadcast({
+        "event": "service_started",
         "booking_id": str(booking.id),
         "status": booking.status
     })

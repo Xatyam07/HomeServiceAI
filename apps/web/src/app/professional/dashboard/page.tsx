@@ -130,6 +130,21 @@ function ProviderDashboardContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dbJobs, setDbJobs] = useState<any[]>([]);
 
+  const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
   // Simulated en-route coordinates map tracker
   const startCoords: [number, number] = [17.4600, 78.3600];
   const destCoords: [number, number] = [17.4485, 78.3741];
@@ -149,10 +164,10 @@ function ProviderDashboardContent() {
       }
     };
     
-    interpolate(start, turn1, 15);
-    interpolate(turn1, turn2, 15);
-    interpolate(turn2, turn3, 15);
-    interpolate(turn3, dest, 15);
+    interpolate(start, turn1, 3);
+    interpolate(turn1, turn2, 4);
+    interpolate(turn2, turn3, 4);
+    interpolate(turn3, dest, 4);
     route.push(dest);
     return route;
   };
@@ -1013,9 +1028,17 @@ function ProviderDashboardContent() {
                               <span>Latitude: {activeTechCoords[0].toFixed(5)}</span>
                               <span>Longitude: {activeTechCoords[1].toFixed(5)}</span>
                             </div>
-                          </div>
-                          <button
-                            onClick={() => updateJobStatus(job.id, 'ARRIVED')}
+                               <button
+                            onClick={() => {
+                              const customerLat = job.latitude || 26.4173;
+                              const customerLng = job.longitude || 80.3341;
+                              const dist = getDistanceInMeters(activeTechCoords[0], activeTechCoords[1], customerLat, customerLng);
+                              if (dist > 10) {
+                                alert(`Cannot mark arrived. You are still ${dist.toFixed(1)} meters away from the customer. You must be within 10 meters (Current distance: ${dist.toFixed(1)}m).`);
+                                return;
+                              }
+                              updateJobStatus(job.id, 'ARRIVED');
+                            }}
                             className="w-full mt-1.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all"
                           >
                             Mark Arrived
@@ -1025,19 +1048,19 @@ function ProviderDashboardContent() {
 
                       {job.status === 'ARRIVED' && (
                         <div className="flex flex-col gap-2">
-                          <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-left">Customer Verification OTP</label>
+                           <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-left">Customer Verification OTP</label>
                           <div className="flex gap-2">
                             <input
                               type="text"
-                              maxLength={6}
-                              placeholder="6-digit OTP"
+                              maxLength={4}
+                              placeholder="4-digit OTP"
                               value={otpInputs[job.id] || ''}
                               onChange={(e) => setOtpInputs(prev => ({ ...prev, [job.id]: e.target.value }))}
                               className="w-28 px-2 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 text-center font-mono font-bold"
                             />
                             <button
                               onClick={() => handleOtpVerify(job.id)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all"
+                              className="px-3 py-1.5 bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-all"
                             >
                               Verify OTP
                             </button>
@@ -1058,7 +1081,7 @@ function ProviderDashboardContent() {
                           }}
                           className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all"
                         >
-                          Finish Job
+                          Service Completed
                         </button>
                       )}
 
@@ -1069,8 +1092,9 @@ function ProviderDashboardContent() {
                       {(job.status === 'PAYMENT_COMPLETED' || job.status === 'COMPLETED' || job.status === 'CLOSED') && (
                         <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
                           <Check size={12} />
-                          <span>Job Completed</span>
+                          <span>Booking Complete Successfully</span>
                         </span>
+                      )}
                       )}
                     </div>
                   </div>
