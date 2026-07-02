@@ -46,7 +46,9 @@ const LiveTimer = ({ createdAt }: { createdAt: string }) => {
 };
 
 function ProviderDashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
+  const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? 'https://homeserviceai-1.onrender.com'
+    : (process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com');
   const router = useRouter();
   const { user, logout, token, refreshUserProfile } = useAuth();
 
@@ -688,100 +690,7 @@ function ProviderDashboardContent() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1">
-        {/* Global Filter Bar */}
-        {['jobs', 'live', 'completed', 'rejected', 'history'].includes(activeTab) && (
-          <div className="mb-6 p-4 rounded-xl bg-slate-950/60 border border-slate-900/60 flex flex-col md:flex-row md:items-center gap-4 text-left">
-            <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
-              {/* Search input */}
-              <div className="col-span-2 md:col-span-1 flex flex-col gap-1">
-                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Search</label>
-                <input
-                  type="text"
-                  placeholder="ID, Customer, Phone..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              {/* State Filter */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">State</label>
-                <select
-                  value={filterState}
-                  onChange={(e) => setFilterState(e.target.value)}
-                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  <option value="">All States</option>
-                  <option value="Telangana">Telangana</option>
-                  <option value="Karnataka">Karnataka</option>
-                  <option value="Maharashtra">Maharashtra</option>
-                  <option value="Delhi">Delhi</option>
-                </select>
-              </div>
-              {/* City Filter */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">City</label>
-                <select
-                  value={filterCity}
-                  onChange={(e) => setFilterCity(e.target.value)}
-                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  <option value="">All Cities</option>
-                  <option value="Hyderabad">Hyderabad</option>
-                  <option value="Bengaluru">Bengaluru</option>
-                  <option value="Mumbai">Mumbai</option>
-                  <option value="Delhi">Delhi</option>
-                </select>
-              </div>
-              {/* Role Filter */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Role</label>
-                <select
-                  value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
-                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  <option value="">All Roles</option>
-                  <option value="CUSTOMER">Customer</option>
-                  <option value="PROVIDER">Professional</option>
-                </select>
-              </div>
-              {/* Status Filter */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Status</label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-3 py-1.5 bg-black/40 border border-slate-800 rounded-lg text-xs text-slate-400 focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="REQUESTED">Requested</option>
-                  <option value="ACCEPTED">Accepted</option>
-                  <option value="ON_THE_WAY">On The Way</option>
-                  <option value="ARRIVED">Arrived</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-              </div>
-            </div>
-            
-            {(searchQuery || filterState || filterCity || filterRole || filterStatus) && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setFilterState('');
-                  setFilterCity('');
-                  setFilterRole('');
-                  setFilterStatus('');
-                }}
-                className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/20 text-rose-400 border border-rose-900/30 rounded-lg text-xs font-bold transition-all"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        )}
+
 
         {activeTab === 'home' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -1705,7 +1614,9 @@ function ProviderDashboardContent() {
 // ADMIN FLEET & PARTNER MANAGEMENT SYSTEM
 // ==========================================
 function AdminManagementDashboard() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
+  const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? 'https://homeserviceai-1.onrender.com'
+    : (process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com');
   const { user, token, logout } = useAuth();
   const router = useRouter();
 

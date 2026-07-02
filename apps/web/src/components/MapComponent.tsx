@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -65,6 +65,7 @@ interface MapComponentProps {
   routeCoordinates?: Array<[number, number]>;
   techMarker?: [number, number];
   theme?: "light" | "dark";
+  onMapClick?: (lat: number, lng: number) => void;
 }
 
 // Controller to auto-center map when props change
@@ -80,6 +81,17 @@ function MapController({ center, bounds }: { center: [number, number]; bounds?: 
   return null;
 }
 
+function MapClickHandler({ onClick }: { onClick?: (latlng: L.LatLng) => void }) {
+  useMapEvents({
+    click(e) {
+      if (onClick) {
+        onClick(e.latlng);
+      }
+    },
+  });
+  return null;
+}
+
 export default function MapComponent({
   center,
   zoom = 13,
@@ -88,6 +100,7 @@ export default function MapComponent({
   routeCoordinates = [],
   techMarker,
   theme = "dark",
+  onMapClick,
 }: MapComponentProps) {
   // Compute fitting boundaries if there are multiple markers
   let bounds: L.LatLngBounds | undefined = undefined;
@@ -120,6 +133,9 @@ export default function MapComponent({
         zoomControl={false}
       >
         <TileLayer url={tileUrl} attribution={attribution} />
+        {onMapClick && (
+          <MapClickHandler onClick={(latlng) => onMapClick(latlng.lat, latlng.lng)} />
+        )}
         
         {/* Customer Location */}
         {customerMarker && (

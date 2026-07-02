@@ -63,7 +63,9 @@ const CITIES_LIST = [
 ];
 
 function DashboardContent() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com';
+  const API_BASE = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+    ? 'https://homeserviceai-1.onrender.com'
+    : (process.env.NEXT_PUBLIC_API_URL || 'https://homeserviceai-1.onrender.com');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, logout, refreshUserProfile, firebaseUser, sendVerification } = useAuth();
@@ -346,6 +348,32 @@ function DashboardContent() {
   const [custCoords, setCustCoords] = useState<[number, number]>([26.4173, 80.3341]);
   const [geocoding, setGeocoding] = useState(false);
   const [geoResults, setGeoResults] = useState<any[]>([]);
+
+  // Silent auto-geolocation fetch on load/mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          setCustCoords([lat, lon]);
+          try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            if (response.ok) {
+              const data = await response.json();
+              setAddress(data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+            }
+          } catch (err) {
+            console.error("Reverse geocoding failed:", err);
+          }
+        },
+        (error) => {
+          console.warn("Silent geolocation auto-fetch declined or failed:", error);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
 
   const detectLiveLocation = () => {
     if (!navigator.geolocation) {
@@ -1191,6 +1219,21 @@ function DashboardContent() {
                       <MapComponent
                         center={custCoords}
                         customerMarker={custCoords}
+                        onMapClick={async (lat, lng) => {
+                          setCustCoords([lat, lng]);
+                          try {
+                            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                            if (response.ok) {
+                              const data = await response.json();
+                              setAddress(data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                            } else {
+                              setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                            }
+                          } catch (err) {
+                            console.error("Reverse geocoding failed:", err);
+                            setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                          }
+                        }}
                         providerMarkers={matchingPros.map((pro, index) => {
                           const coords = getProCoords(pro, index);
                           return {
