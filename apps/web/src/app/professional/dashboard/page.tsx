@@ -120,47 +120,6 @@ function ProviderDashboardContent() {
   // Calendar states
   const [isAvailable, setIsAvailable] = useState(true);
   const [activeTab, setActiveTab] = useState<'home' | 'live' | 'pending' | 'accepted' | 'inprogress' | 'completed' | 'rejected' | 'history' | 'payments' | 'settings' | 'analytics'>('home');
-  const [walletBalance, setWalletBalance] = useState(4850);
-  const [payoutStatus, setPayoutStatus] = useState<'idle' | 'processing' | 'done'>('idle');
-
-  const triggerPayout = () => {
-    setPayoutStatus('processing');
-    setTimeout(() => {
-      setWalletBalance(0);
-      setPayoutStatus('done');
-      setTimeout(() => setPayoutStatus('idle'), 2000);
-    }, 1500);
-  };
-
-  const earningsData = [
-    { day: "Mon", jobs: 2, amount: 800 },
-    { day: "Tue", jobs: 3, amount: 1250 },
-    { day: "Wed", jobs: 1, amount: 450 },
-    { day: "Thu", jobs: 4, amount: 1900 },
-    { day: "Fri", jobs: 3, amount: 1400 },
-    { day: "Sat", jobs: 5, amount: 2200 },
-    { day: "Sun", jobs: 0, amount: 0 }
-  ];
-
-  const [profileForm, setProfileForm] = useState({
-    name: user?.name || '',
-    phone: user?.phone || '9999999999'
-  });
-
-  useEffect(() => {
-    if (user) {
-      setProfileForm({
-        name: user.name || '',
-        phone: user.phone || '9999999999'
-      });
-    }
-  }, [user]);
-
-  const updateProfileSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert("Profile settings updated successfully!");
-  };
-
   const [jobsSubTab, setJobsSubTab] = useState<'NEW' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'OTP_PENDING' | 'SERVICE_RUNNING' | 'PAYMENT_PENDING' | 'COMPLETED' | 'CANCELLED'>('NEW');
   
   // Custom Filters & Search States for Professional Dashboard
