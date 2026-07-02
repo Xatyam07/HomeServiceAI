@@ -23,20 +23,25 @@ router = APIRouter()
 def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     from app.seed import CITIES_COORDINATES
     
-    # 1. Detect city from booking address
+    satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
+    if satyam_user:
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
+        if profile:
+            profile.category = booking.service_type
+            profile.is_available = True
+            db.commit()
+
     city = "Kanpur"
     for c in CITIES_COORDINATES:
         if c.lower() in booking.address.lower():
             city = c
             break
             
-    # 2. Get existing rejected providers list
     try:
         rejected_ids = json.loads(booking.rejected_providers or "[]")
     except:
         rejected_ids = []
         
-    # 3. Find approved, available providers in this city & category
     query = db.query(User, ProviderProfile).join(
         ProviderProfile, User.id == ProviderProfile.user_id
     ).filter(
@@ -49,7 +54,6 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
     
     candidates = query.all()
     
-    # Fallback to category only if city-wide matches are empty
     if not candidates:
         query = db.query(User, ProviderProfile).join(
             ProviderProfile, User.id == ProviderProfile.user_id
@@ -59,11 +63,8 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
         )
         candidates = query.all()
 
-    # Filter out already rejected providers
     candidates = [c for c in candidates if str(c[0].id) not in rejected_ids]
     
-    # DISPATCH LOGIC:
-    # "IF original professional exists -> assign to original. ELSE assign to xatyammishra07@gmail.com"
     original_candidates = []
     testing_candidate = None
     for u, p in candidates:
@@ -73,33 +74,31 @@ def find_and_assign_provider(booking: Booking, db: Session) -> bool:
         elif not email.endswith("@homesphere.com"):
             original_candidates.append((u, p))
             
-    if original_candidates:
+    if testing_candidate:
+        candidates = [testing_candidate]
+    elif original_candidates:
         candidates = original_candidates
     else:
-        if testing_candidate:
-            candidates = [testing_candidate]
+        if satyam_user:
+            profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
+            if not profile:
+                profile = ProviderProfile(
+                    user_id=satyam_user.id,
+                    category=booking.service_type,
+                    experience_yrs=5,
+                    is_verified=True,
+                    is_available=True,
+                    rating=4.8,
+                    city="Kanpur",
+                    latitude=26.4499,
+                    longitude=80.3319
+                )
+                db.add(profile)
+                db.commit()
+                db.refresh(profile)
+            candidates = [(satyam_user, profile)]
         else:
-            satyam_user = db.query(User).filter(User.email.ilike("xatyammishra07@gmail.com")).first()
-            if satyam_user:
-                profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == satyam_user.id).first()
-                if not profile:
-                    profile = ProviderProfile(
-                        user_id=satyam_user.id,
-                        category=booking.service_type,
-                        experience_yrs=5,
-                        is_verified=True,
-                        is_available=True,
-                        rating=4.8,
-                        city="Kanpur",
-                        latitude=26.4499,
-                        longitude=80.3319
-                    )
-                    db.add(profile)
-                    db.commit()
-                    db.refresh(profile)
-                candidates = [(satyam_user, profile)]
-            else:
-                candidates = []
+            candidates = []
     
     if not candidates:
         booking.provider_id = None

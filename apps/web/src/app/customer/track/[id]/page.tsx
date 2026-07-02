@@ -87,7 +87,7 @@ export default function TrackBooking() {
 
   useEffect(() => {
     if (currentStatus !== 'ON_THE_WAY') return;
-    setEtaSeconds(30);
+    setEtaSeconds(15);
     const secInterval = setInterval(() => {
       setEtaSeconds(s => Math.max(0, s - 1));
     }, 1000);
@@ -195,10 +195,10 @@ export default function TrackBooking() {
       }
     };
     
-    interpolate(start, turn1, 15);
-    interpolate(turn1, turn2, 15);
-    interpolate(turn2, turn3, 15);
-    interpolate(turn3, dest, 15);
+    interpolate(start, turn1, 3);
+    interpolate(turn1, turn2, 4);
+    interpolate(turn2, turn3, 4);
+    interpolate(turn3, dest, 4);
     route.push(dest);
     return route;
   };
@@ -506,7 +506,7 @@ export default function TrackBooking() {
             </div>
 
             {/* Payment Outstanding Card */}
-            {bookingDetails?.payment_status === 'PENDING' && (
+            {bookingDetails?.payment_status === 'PENDING' && ['SERVICE_COMPLETED', 'PAYMENT_PENDING', 'COMPLETED', 'CLOSED'].includes(bookingDetails?.status) && (
               <div className="mt-5 p-5 rounded-2xl border border-yellow-900/30 bg-gradient-to-tr from-yellow-950/20 to-amber-950/20 text-left flex flex-col gap-3 shadow-lg">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2 text-amber-400">
